@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: amfta-api
+  labels:
+    app: amfta-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: amfta-api
+  template:
+    metadata:
+      labels:
+        app: amfta-api
+    spec:
+      containers:
+        - name: amfta-api
+          image: amfta-fl:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: MODEL_CHECKPOINT_PATH
+              value: "/checkpoints/amfta_best.pt"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: amfta-api-svc
+spec:
+  selector:
+    app: amfta-api
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+  type: LoadBalancer

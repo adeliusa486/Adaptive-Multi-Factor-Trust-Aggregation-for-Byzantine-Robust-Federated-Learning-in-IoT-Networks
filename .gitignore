@@ -1,0 +1,88 @@
+# =============================================================================
+# AMFTA .gitignore
+# =============================================================================
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+
+# Data (large files — use DVC or direct download)
+data/raw/
+data/processed/
+data/partitions/
+data/server/
+data/splits/
+*.csv
+*.parquet
+*.npz
+*.npy
+
+# Model checkpoints (large binary files)
+checkpoints/
+*.pt
+*.pth
+*.pkl
+*.bin
+
+# Experiment results (regenerable)
+results/
+figures/
+htmlcov/
+.coverage
+coverage.xml
+
+# Notebooks output (keep notebooks, ignore output)
+notebooks/.ipynb_checkpoints/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.mypy_cache/
+
+# Docker
+.docker/
+docker-compose.override.yml
+
+# Logs
+logs/
+*.log
+
+# MLflow
+mlruns/
+
+# Wandb
+wandb/
+
+# Monitoring
+monitoring/grafana/
+
+# Miscellaneous
+*.tmp
+*.bak
+*.orig

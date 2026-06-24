@@ -1,0 +1,158 @@
+name: AMFTA CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  # ===========================================================================
+  # Lint and Type Check
+  # ===========================================================================
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install lint tools
+        run: pip install black isort flake8 mypy
+
+      - name: Black format check
+        run: black --check --diff amfta/ training/ evaluation/ experiments/ api/ tests/
+
+      - name: isort import order check
+        run: isort --check-only --diff amfta/ training/ evaluation/ experiments/ api/ tests/
+
+      - name: Flake8 style check
+        run: |
+          flake8 amfta/ training/ evaluation/ experiments/ api/ \
+            --max-line-length=95 \
+            --extend-ignore=E203,W503 \
+            --exclude=__pycache__
+
+  # ===========================================================================
+  # Unit Tests (fast, no real data)
+  # ===========================================================================
+  unit-tests:
+    name: Unit Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run unit tests with coverage
+        run: |
+          pytest tests/test_trust_factors.py tests/test_model_and_data.py \
+            -v --timeout=60 \
+            --cov=amfta \
+            --cov-report=xml \
+            --cov-report=term-missing
+
+      - name: Upload coverage
+        if: matrix.python-version == '3.11'
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+
+  # ===========================================================================
+  # Integration Smoke Tests
+  # ===========================================================================
+  integration-tests:
+    name: Integration Smoke Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run integration tests
+        run: |
+          pytest tests/test_integration.py \
+            -v --timeout=120 \
+            -m "not slow"
+
+  # ===========================================================================
+  # API smoke test
+  # ===========================================================================
+  api-smoke-test:
+    name: API Smoke Test
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Start API and test health endpoint
+        run: |
+          uvicorn api.main:app --host 0.0.0.0 --port 8000 &
+          sleep 5
+          curl -f http://localhost:8000/health
+          curl -f -X POST http://localhost:8000/predict \
+            -H "Content-Type: application/json" \
+            -d '{"features": ['"$(python -c "print(','.join(['0.1']*45))"')"]}'
+          kill %1
+
+  # ===========================================================================
+  # Docker Build
+  # ===========================================================================
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t amfta-fl:ci --target app .
+
+      - name: Run tests in Docker
+        run: |
+          docker run --rm \
+            -e PYTHONPATH=/app \
+            amfta-fl:ci \
+            pytest tests/test_trust_factors.py tests/test_model_and_data.py \
+              -v --timeout=60 -q

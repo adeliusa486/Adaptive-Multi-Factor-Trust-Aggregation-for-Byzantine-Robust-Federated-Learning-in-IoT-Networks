@@ -1,0 +1,111 @@
+version: "3.9"
+
+# =============================================================================
+# AMFTA Docker Compose Services
+# =============================================================================
+# Start all:     docker-compose up
+# API only:      docker-compose up amfta-api
+# Run training:  docker-compose run --rm amfta-train
+# Run tests:     docker-compose run --rm amfta-test
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Inference API
+  # ---------------------------------------------------------------------------
+  amfta-api:
+    build:
+      context: .
+      target: api
+    image: amfta-fl:api
+    container_name: amfta-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./checkpoints:/app/checkpoints:ro
+      - ./results:/app/results
+    environment:
+      - MODEL_CHECKPOINT_PATH=/app/checkpoints/amfta_best.pt
+      - PYTHONPATH=/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Training (synthetic data, quick)
+  # ---------------------------------------------------------------------------
+  amfta-train:
+    build:
+      context: .
+      target: train
+    image: amfta-fl:train
+    container_name: amfta-train
+    volumes:
+      - ./data:/app/data
+      - ./results:/app/results
+      - ./checkpoints:/app/checkpoints
+      - ./figures:/app/figures
+    environment:
+      - PYTHONPATH=/app
+      - AMFTA_USE_SYNTHETIC=true
+    command: >
+      python experiments/run_main.py
+        --use_synthetic
+        --num_rounds 20
+        --num_clients 20
+        --method amfta
+        --byzantine_fraction 0.30
+
+  # ---------------------------------------------------------------------------
+  # Test runner
+  # ---------------------------------------------------------------------------
+  amfta-test:
+    build:
+      context: .
+      target: app
+    image: amfta-fl:app
+    container_name: amfta-test
+    volumes:
+      - ./data:/app/data
+      - ./results:/app/results
+    environment:
+      - PYTHONPATH=/app
+    command: pytest tests/ -v --timeout=120 -m "not slow"
+
+  # ---------------------------------------------------------------------------
+  # Monitoring (Prometheus)  — optional
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: amfta-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    profiles:
+      - monitoring
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Dashboard (Grafana)  — optional
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:10.1.0
+    container_name: amfta-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./monitoring/grafana:/var/lib/grafana
+    depends_on:
+      - prometheus
+    profiles:
+      - monitoring
+    restart: unless-stopped
+
+volumes:
+  grafana-storage:

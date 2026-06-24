@@ -73,7 +73,7 @@ class RunConfig:
     num_rounds: int = 100
     local_epochs: int = 5
     local_lr: float = 0.01
-    local_batch_size: int = 64
+    local_batch_size: int = 2048
     global_lr: float = 1.0            # η_global — scales aggregated update
 
     # Byzantine parameters
@@ -107,7 +107,7 @@ class RunConfig:
     n_synthetic: int = 50_000
 
     # Model
-    model_input_dim: int = 45
+    model_input_dim: int = 41
     model_hidden1: int = 64
     model_hidden2: int = 32
 
@@ -153,22 +153,25 @@ def local_train(
     model = copy.deepcopy(model).to(device)
     w_before = {k: v.clone() for k, v in model.state_dict().items()}
 
-    dataset = TensorDataset(X.float().to(device), y.float().to(device))
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=False)
-
     optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
     criterion = nn.BCELoss()
 
     model.train()
+    num_samples = len(X)
     for _ in range(epochs):
-        for X_b, y_b in loader:
+        indices = torch.randperm(num_samples, device=device)
+        X_shuff = X[indices]
+        y_shuff = y[indices]
+        for i in range(0, num_samples, batch_size):
+            X_b = X_shuff[i:i+batch_size]
+            y_b = y_shuff[i:i+batch_size]
             optimizer.zero_grad()
             pred = model(X_b)
             loss = criterion(pred, y_b)
             loss.backward()
             optimizer.step()
 
-    update = {k: model.state_dict()[k].cpu() - w_before[k].cpu() for k in w_before}
+    update = {k: model.state_dict()[k] - w_before[k] for k in w_before}
     return update
 
 
@@ -194,7 +197,7 @@ class FederatedRunner:
             input_dim=config.model_input_dim,
             hidden1=config.model_hidden1,
             hidden2=config.model_hidden2,
-        )
+        ).to(self.device)
 
         # Build aggregator
         self.aggregator = self._build_aggregator()
@@ -272,16 +275,16 @@ class FederatedRunner:
         self.X_test = torch.from_numpy(X_test.astype(np.float32))
         self.y_test = torch.from_numpy(y_test.astype(np.float32))
         self.val_buffer = (
-            torch.from_numpy(X_buf.astype(np.float32)),
-            torch.from_numpy(y_buf.astype(np.float32)),
+            torch.from_numpy(X_buf.astype(np.float32)).to(self.device),
+            torch.from_numpy(y_buf.astype(np.float32)).to(self.device),
         )
 
         # Convert client data to tensors
         self.client_tensors: Dict[int, Tuple[torch.Tensor, torch.Tensor]] = {}
         for cid, (Xc, yc) in self.client_data.items():
             self.client_tensors[cid] = (
-                torch.from_numpy(Xc.astype(np.float32)),
-                torch.from_numpy(yc.astype(np.float32)),
+                torch.from_numpy(Xc.astype(np.float32)).to(self.device),
+                torch.from_numpy(yc.astype(np.float32)).to(self.device),
             )
 
         logger.info(

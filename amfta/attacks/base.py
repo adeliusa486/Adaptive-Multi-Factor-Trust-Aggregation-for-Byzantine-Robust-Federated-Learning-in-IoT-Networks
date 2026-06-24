@@ -63,14 +63,21 @@ def _train_model(
     batch_size: int,
 ) -> nn.Module:
     """Standard local SGD training loop."""
-    dataset = TensorDataset(X.float(), y.float())
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=False)
+    device = next(model.parameters()).device
     optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
     criterion = nn.BCELoss()
 
     model.train()
+    X = X.float().to(device)
+    y = y.float().to(device)
+    num_samples = len(X)
     for _ in range(epochs):
-        for X_b, y_b in loader:
+        indices = torch.randperm(num_samples, device=device)
+        X_shuff = X[indices]
+        y_shuff = y[indices]
+        for i in range(0, num_samples, batch_size):
+            X_b = X_shuff[i:i+batch_size]
+            y_b = y_shuff[i:i+batch_size]
             optimizer.zero_grad()
             pred = model(X_b)
             loss = criterion(pred, y_b)

@@ -110,12 +110,12 @@ def main():
         return
 
     if args.preprocess:
-        if not Path(EXPECTED_FILE).exists():
-            print(f"\n  ERROR: {EXPECTED_FILE} not found.")
+        if not Path("data/raw/NF-TON-IoT.csv").exists() and not Path("data/raw/NF-TON-IoT.parquet").exists() and not list(Path("data/raw").glob("*.parquet")):
+            print(f"\n  ERROR: Dataset not found in data/raw/")
             print(f"\n  To download TON_IoT dataset:")
             print(f"    1. Visit: {TON_IOT_URL}")
             print(f"    2. Download 'Network Flow (NF-TON-IoT)' variant")
-            print(f"    3. Place NF-TON-IoT.csv in data/raw/")
+            print(f"    3. Place NF-TON-IoT.csv or .parquet in data/raw/")
             print(f"    4. Re-run: python scripts/setup_data.py --preprocess")
             print(f"\n  Or use synthetic data: python scripts/setup_data.py --synthetic")
             sys.exit(1)

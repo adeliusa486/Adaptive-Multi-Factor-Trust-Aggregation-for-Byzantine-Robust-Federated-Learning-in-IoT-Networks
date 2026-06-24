@@ -43,7 +43,7 @@ class LocalMLP(nn.Module):
 
     def __init__(
         self,
-        input_dim: int = 45,
+        input_dim: int = 41,
         hidden1: int = 64,
         hidden2: int = 32,
         dropout: float = 0.0,

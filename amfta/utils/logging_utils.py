@@ -109,7 +109,7 @@ class ExperimentLogger:
         """Flush all results to JSON."""
         with open(self.json_path, "w") as f:
             json.dump(self._rows, f, indent=2, default=str)
-        self._logger.info("Results saved → %s, %s", self.csv_path, self.json_path)
+        self._logger.info("Results saved -> %s, %s", self.csv_path, self.json_path)
 
     def close(self) -> None:
         """Close open file handles."""

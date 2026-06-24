@@ -115,8 +115,8 @@ def main():
 
     if args.all:
         methods_to_run = METHODS
-        byz_rates = BYZ_RATES
-        attacks_to_run = ATTACK_TYPES
+        byz_rates = [0.30]  # Only run for 30% byzantine fraction for this paper run
+        attacks_to_run = ["label_flipping"] # Only label flipping
     else:
         methods_to_run = [args.method]
         byz_rates = [args.byzantine_fraction]
@@ -132,7 +132,8 @@ def main():
                     result = run_single(method, byz_rate, attack, args.seeds, args)
                     all_results[key] = result
                 except Exception as e:
-                    logger.error("FAILED: %s — %s", key, e)
+                    import traceback
+                    logger.error("FAILED: %s - %s\n%s", key, e, traceback.format_exc())
                     all_results[key] = {"error": str(e)}
 
     # Save consolidated results

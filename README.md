@@ -228,21 +228,6 @@ Results are reported as mean ± std across 5 seeds.
 
 ---
 
-## Citation
-
-If you use this code in your research, please cite:
-
-```bibtex
-@article{amfta2024,
-  title   = {AMFTA: Adaptive Multi-Factor Trust Aggregation for
-             Byzantine-Resilient Federated Learning in Non-IID Smart City IoT Networks},
-  journal = {IEEE Internet of Things Journal},
-  year    = {2024},
-  note    = {Under Review}
-}
-```
-
----
 
 ## License
 

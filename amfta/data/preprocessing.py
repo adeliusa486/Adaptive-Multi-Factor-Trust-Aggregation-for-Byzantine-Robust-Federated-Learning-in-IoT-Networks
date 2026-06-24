@@ -57,25 +57,35 @@ RANDOM_STATE = 42
 # ---------------------------------------------------------------------------
 
 def load_raw_data(raw_dir: Path = RAW_DATA_DIR) -> pd.DataFrame:
-    """Load and concatenate all CSV files from the raw data directory.
+    """Load and concatenate all CSV or Parquet files from the raw data directory.
 
-    Looks for NF-TON-IoT.csv first, then falls back to any *.csv in raw_dir.
+    Looks for NF-TON-IoT.csv first, then falls back to any *.parquet or *.csv in raw_dir.
 
     Returns
     -------
     pd.DataFrame  Raw concatenated dataset.
     """
     raw_dir = Path(raw_dir)
-    candidate = raw_dir / "NF-TON-IoT.csv"
+    candidate_csv = raw_dir / "NF-TON-IoT.csv"
+    candidate_parquet = raw_dir / "NF-TON-IoT.parquet"
 
-    if candidate.exists():
-        logger.info("Loading %s ...", candidate)
-        return pd.read_csv(candidate, low_memory=False)
+    if candidate_csv.exists():
+        logger.info("Loading %s ...", candidate_csv)
+        return pd.read_csv(candidate_csv, low_memory=False)
+
+    if candidate_parquet.exists():
+        logger.info("Loading %s ...", candidate_parquet)
+        return pd.read_parquet(candidate_parquet)
+
+    parquet_files = sorted(raw_dir.glob("*.parquet"))
+    if parquet_files:
+        logger.info("Loading %s ...", parquet_files[0])
+        return pd.read_parquet(parquet_files[0])
 
     csv_files = sorted(raw_dir.glob("*.csv"))
     if not csv_files:
         raise FileNotFoundError(
-            f"No CSV files found in {raw_dir}. "
+            f"No CSV or Parquet files found in {raw_dir}. "
             "Download the TON_IoT Network Traffic dataset from "
             "https://research.unsw.edu.au/projects/toniot-datasets "
             "and place it in data/raw/"

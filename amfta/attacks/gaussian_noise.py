@@ -74,17 +74,16 @@ class GaussianNoiseAttack(BaseAttack):
             Reference L2 norm for scaling sigma.  Used when scale_to_honest=True.
             Typically set to the mean norm of honest updates from the previous round.
         """
-        generator = torch.Generator()
-        if self.seed is not None:
-            generator.manual_seed(self.seed)
-
         effective_sigma = self.sigma
         if self.scale_to_honest and honest_norm_ref is not None:
             effective_sigma = self.sigma * honest_norm_ref
 
         noise_update: Dict[str, torch.Tensor] = {}
         for k, v in global_model.state_dict().items():
-            noise_update[k] = torch.randn(v.shape, generator=generator) * effective_sigma
+            generator = torch.Generator(device=v.device)
+            if self.seed is not None:
+                generator.manual_seed(self.seed)
+            noise_update[k] = torch.randn(v.shape, generator=generator, device=v.device) * effective_sigma
 
         return noise_update
 

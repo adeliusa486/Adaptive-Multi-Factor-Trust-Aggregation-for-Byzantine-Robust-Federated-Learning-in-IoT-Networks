@@ -86,3 +86,10 @@ monitoring/grafana/
 *.tmp
 *.bak
 *.orig
+
+# Runtime sweep artifacts
+*.out
+*.err
+watchdog.log
+full_study_watchdog.*
+focused_study.*

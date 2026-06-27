@@ -36,6 +36,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from amfta.aggregation.amfta import AMFTAAggregator
 from amfta.aggregation.baselines import (
     FedAvgAggregator,
+    FedDBCAggregator,
     FLTrustAggregator,
     KrumAggregator,
     TrimmedMeanAggregator,
@@ -49,7 +50,7 @@ from amfta.data.partitioning import (
 )
 from amfta.models.local_mlp import LocalMLP
 from amfta.utils.logging_utils import ExperimentLogger
-from amfta.utils.metrics import evaluate_model
+from amfta.utils.metrics import evaluate_model, evaluate_model_fast
 from amfta.utils.reproducibility import set_seed, get_device
 
 logger = logging.getLogger(__name__)
@@ -300,9 +301,13 @@ class FederatedRunner:
         cfg = self.cfg
         method = cfg.method.lower()
 
-        if method == "amfta":
-            # Handle ablation variants
-            use_q = not cfg.disable_factor_q
+        if method in ("amfta", "amfta_noq"):
+            # Handle ablation variants. 'amfta_noq' is the no-trusted-data
+            # ablation: Factor III (server validation buffer) is disabled, so
+            # the method uses only gradient similarity + reputation. This
+            # answers the "why does AMFTA need trusted validation data?" review
+            # question by showing performance without any trusted data.
+            use_q = (method != "amfta_noq") and (not cfg.disable_factor_q)
             agg = AMFTAAggregator(
                 num_clients=cfg.num_clients,
                 alpha_s=cfg.alpha_s,
@@ -327,6 +332,9 @@ class FederatedRunner:
 
         elif method == "trimmed_mean":
             return TrimmedMeanAggregator(trim_fraction=cfg.trim_fraction)
+
+        elif method == "feddbc":
+            return FedDBCAggregator(trim_fraction=cfg.trim_fraction)
 
         elif method == "fltrust":
             return FLTrustAggregator(root_dataset_size=cfg.fltrust_root_size)
@@ -400,9 +408,12 @@ class FederatedRunner:
                     agg_update = self.aggregator.aggregate(
                         self.global_model, updates, root_update=root_update
                     )
-                elif cfg.method == "amfta":
+                elif cfg.method in ("amfta", "amfta_noq"):
+                    # amfta_noq passes val_buffer but never reads it
+                    # (use_quality_eval=False) — the no-trusted-data ablation.
+                    vb = None if cfg.method == "amfta_noq" else self.val_buffer
                     agg_update = self.aggregator.aggregate(
-                        self.global_model, updates, val_buffer=self.val_buffer
+                        self.global_model, updates, val_buffer=vb
                     )
                 else:
                     agg_update = self.aggregator.aggregate(self.global_model, updates)
@@ -411,13 +422,13 @@ class FederatedRunner:
                 self.global_model.apply_update(agg_update, lr=cfg.global_lr)
 
                 # ── Phase D: Evaluation ────────────────────────────────────
-                metrics = evaluate_model(
+                metrics = evaluate_model_fast(
                     self.global_model, self.X_test, self.y_test, device=self.device
                 )
 
                 # Collect trust diagnostics (AMFTA only)
                 diagnostics = {}
-                if cfg.method == "amfta" and hasattr(self.aggregator, "_diagnostics"):
+                if cfg.method in ("amfta", "amfta_noq") and hasattr(self.aggregator, "_diagnostics"):
                     if self.aggregator._diagnostics:
                         last_diag = self.aggregator._diagnostics[-1]
                         diagnostics = {

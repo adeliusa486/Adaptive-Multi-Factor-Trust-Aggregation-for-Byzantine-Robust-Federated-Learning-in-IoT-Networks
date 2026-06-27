@@ -253,27 +253,56 @@ class AMFTAAggregator:
     def _soft_aggregate(
         updates: UpdateDict,
         trust: ScoreDict,
+        eps: float = 1e-8,
     ) -> Dict[str, torch.Tensor]:
         """Compute the trust-weighted mean of all client updates.
 
-        ḡ^{(t)} = Σ_i T_i^{(t)} · g_i^{(t)} / Σ_i T_i^{(t)}
+        ḡ^{(t)} = Σ_i T_i^{(t)} · ĝ_i^{(t)} / Σ_i T_i^{(t)}
 
-        No client is hard-excluded — all contribute proportionally to trust.
+        Magnitude normalisation (critical for stability)
+        ------------------------------------------------
+        Trust scores only re-weight the *direction* of each update; they do not
+        bound its *magnitude*.  Under label-flipping attacks, poisoned clients
+        produce updates with disproportionately large norms.  Even at a small
+        trust weight, a few such high-norm updates can dominate the weighted
+        sum and flip the global model between the two trivial solutions
+        (all-attack / all-normal), causing the round-to-round oscillation
+        observed in early experiments.
+
+        To prevent this, every client update is rescaled toward a common
+        magnitude reference before trust-weighting (analogous to the root-norm
+        rescaling used by FLTrust).  This bounds the influence of any single
+        client to its trust weight, restoring convergence.  No client is
+        hard-excluded — all contribute proportionally to trust.
+
         """
+        client_ids = list(updates.keys())
+        param_keys = list(next(iter(updates.values())).keys())
+
+        # --- Robust per-client magnitude normalisation ---
+        norms = {
+            cid: torch.sqrt(
+                sum((updates[cid][k].float() ** 2).sum() for k in param_keys)
+            ).item()
+            for cid in client_ids
+        }
+        sorted_norms = sorted(norms.values())
+        target_norm = sorted_norms[len(sorted_norms) // 2]  # median norm
+        scale = {
+            cid: (target_norm / (norms[cid] + eps)) for cid in client_ids
+        }
+
         total_trust = sum(trust.values())
         if total_trust <= 0.0:
             logger.warning("Total trust is zero; falling back to uniform aggregation.")
-            n = len(updates)
-            total_trust = float(n)
-            trust = {cid: 1.0 for cid in updates}
+            total_trust = float(len(client_ids))
+            trust = {cid: 1.0 for cid in client_ids}
 
         aggregated: Dict[str, torch.Tensor] = {}
-        param_keys = list(next(iter(updates.values())).keys())
-
         for k in param_keys:
             weighted_sum = sum(
-                trust[cid] * updates[cid][k].float()
-                for cid in updates
+                trust[cid] * scale[cid] * updates[cid][k].float()
+                for cid in client_ids
             )
             aggregated[k] = weighted_sum / total_trust
 

@@ -1,241 +1,104 @@
-# AMFTA-FL: Adaptive Multi-Factor Trust Aggregation for Byzantine-Resilient Federated Learning
+# Byzantine-robust federated intrusion detection on TON_IoT
 
-[![CI](https://github.com/amfta-research/amfta-fl/actions/workflows/ci.yml/badge.svg)](https://github.com/amfta-research/amfta-fl/actions)
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+Code for our study comparing Byzantine-robust aggregation methods for federated
+network intrusion detection under realistic non-IID conditions. We benchmark
+seven server-side strategies on the real TON_IoT dataset and look at how each one
+holds up as the fraction of malicious clients grows.
 
-> **Federated Intrusion Detection for Smart City IoT with 30% Byzantine Tolerance**
+The short version of what we found: no single method wins everywhere. Density
+clustering and trimming do best under mild model-poisoning but fall apart at a 30%
+attacker fraction, while a trust-momentum aggregator degrades gracefully. We also
+found that the trust-based method does *not* need a trusted validation set on the
+server — dropping it actually helps at high attacker fractions.
 
-Official implementation of the AMFTA framework described in:
+## Methods compared
 
-> *"AMFTA: Adaptive Multi-Factor Trust Aggregation for Byzantine-Resilient Federated Learning in Non-IID Smart City IoT Networks"* — submitted to IEEE Internet of Things Journal.
+- FedAvg (no defense, reference point)
+- Trimmed Mean (coordinate-wise)
+- Krum
+- FLTrust (server reference update)
+- FedDBC (density-based clustering)
+- AMFTA — multi-factor trust (similarity + reputation EMA + optional quality)
+- AMFTA-ND — AMFTA without the trusted validation buffer
 
----
+## Results (last-5-round mean accuracy, 3 seeds)
 
-## Overview
+Label flipping:
 
-AMFTA is a Byzantine-robust federated learning aggregation framework designed for heterogeneous IoT deployments. Unlike prior methods that rely on clean server-side data (FLTrust) or reject legitimate non-IID updates (Krum), AMFTA uses three complementary trust signals:
+| Method       | 10%  | 20%  | 30%  |
+|--------------|------|------|------|
+| FedAvg       | 94.3 | 89.3 | 73.8 |
+| Trimmed Mean | 92.1 | 91.4 | 83.0 |
+| Krum         | 89.7 | 89.5 | 87.3 |
+| FLTrust      | 77.4 | 74.6 | 72.1 |
+| FedDBC       | 92.1 | 85.6 | 72.0 |
+| AMFTA        | 93.1 | 92.8 | 80.3 |
+| AMFTA-ND     | 92.5 | 92.3 | 91.7 |
 
-| Factor | Symbol | Description |
-|--------|--------|-------------|
-| **I — Gradient Similarity** | S_i | Cosine similarity of client update to population centroid |
-| **II — Historical Reputation** | H_i | EMA of per-client consistency across rounds (β=0.9) |
-| **III — Contribution Quality** | Q_i | Leave-one-out accuracy delta on 500-sample server buffer |
+Gaussian noise:
 
-**Final trust score:**
-```
-T_i = α_s · S_i + α_h · H_i + α_q · Q_i
-    = 0.4 · S_i + 0.3 · H_i + 0.3 · Q_i
-```
+| Method       | 10%  | 20%  | 30%  |
+|--------------|------|------|------|
+| FedAvg       | 71.3 | 40.8 | 42.8 |
+| Trimmed Mean | 94.4 | 57.0 | 41.5 |
+| Krum         | 90.0 | 89.9 | 90.3 |
+| FLTrust      | 77.3 | 73.6 | 70.3 |
+| FedDBC       | 93.9 | 92.8 | 65.3 |
+| AMFTA        | 90.3 | 89.5 | 89.3 |
+| AMFTA-ND     | 90.9 | 90.6 | 90.6 |
 
-Quality evaluation (Factor III) is applied **selectively** to borderline clients only (τ_l=0.35 < T̂ < τ_u=0.55), reducing computational overhead while maintaining accuracy.
+Numbers are produced by `experiments/build_paper_tables.py` directly from the
+per-run JSON files under `results/`. Nothing in the tables is hand-edited.
 
-### Key Results (TON_IoT, 30% Byzantine, Label Flipping)
-
-| Method | Accuracy | F1 | Precision | Recall |
-|--------|----------|----|-----------|--------|
-| FedAvg | 0.712 | 0.698 | 0.683 | 0.714 |
-| Krum | 0.744 | 0.731 | 0.756 | 0.708 |
-| Trimmed Mean | 0.768 | 0.759 | 0.771 | 0.748 |
-| FLTrust | 0.801 | 0.793 | 0.812 | 0.775 |
-| **AMFTA** | **0.923** | **0.918** | **0.931** | **0.906** |
-
----
-
-## Architecture
-
-```
-amfta-fl/
-├── amfta/                      # Core package
-│   ├── models/
-│   │   └── local_mlp.py        # 3-layer MLP (45→64→32→1)
-│   ├── aggregation/
-│   │   ├── trust_factors.py    # Factors I, II, III computation
-│   │   ├── amfta.py            # AMFTAAggregator (full pipeline)
-│   │   └── baselines.py        # FedAvg, Krum, TrimmedMean, FLTrust
-│   ├── attacks/
-│   │   ├── label_flipping.py   # Label flip Byzantine attack
-│   │   └── gaussian_noise.py   # Gaussian noise Byzantine attack
-│   ├── data/
-│   │   ├── preprocessing.py    # TON_IoT data pipeline
-│   │   └── partitioning.py     # Dirichlet non-IID partitioning
-│   └── utils/
-│       ├── metrics.py          # Evaluation metrics
-│       ├── reproducibility.py  # Seeding utilities
-│       └── logging_utils.py    # Experiment logging
-├── training/
-│   └── federated_runner.py     # Full FL training orchestrator
-├── experiments/
-│   ├── run_main.py             # Table II: all methods comparison
-│   ├── run_ablation.py         # Table III: ablation study
-│   └── run_scalability.py      # Figure 4: Byzantine rate sweep
-├── evaluation/
-│   └── visualize.py            # Figure generation
-├── api/
-│   └── main.py                 # FastAPI inference service
-├── tests/                      # Unit + integration tests
-├── configs/
-│   └── config.yaml             # Experiment configuration
-├── deployment/k8s/             # Kubernetes manifests
-└── monitoring/                 # Prometheus + Grafana configs
-```
-
----
-
-## Quick Start
-
-### 1. Clone & Install
+## Setup
 
 ```bash
-git clone https://github.com/amfta-research/amfta-fl.git
-cd amfta-fl
 pip install -r requirements.txt
 ```
 
-### 2. Quick Smoke Test (No Data Download Required)
+The TON_IoT network-flow CSV is not included (it is large). Download it from
+UNSW Canberra (https://research.unsw.edu.au/projects/toniot-datasets) and place it
+under `data/raw/`, then build the partitions:
 
 ```bash
-# Uses synthetic data — verifies the full pipeline works
-make smoke
-# or
-python experiments/run_main.py \
-  --method amfta \
-  --use_synthetic \
-  --num_rounds 5 \
-  --num_clients 10
+python -m amfta.data.preprocessing
+python -m amfta.data.partitioning   # Dirichlet alpha=0.5, 100 clients
 ```
 
-### 3. Full Experiment (TON_IoT Dataset)
+## Running the experiments
 
-**Download the dataset:**
-```bash
-# Place NF-TON-IoT.csv in data/raw/
-# Source: https://research.unsw.edu.au/projects/toniot-datasets
-```
-
-**Preprocess:**
-```bash
-make preprocess       # Normalize, split, extract server buffer
-make partition        # Dirichlet partition (α=0.5, N=100 clients)
-```
-
-**Run all experiments:**
-```bash
-make train            # All methods × all Byzantine rates
-make ablation         # Ablation study
-make figures          # Generate paper figures
-```
-
----
-
-## Dataset
-
-This implementation uses the **TON_IoT Network Traffic Dataset** (Network Flow variant):
-
-- **Source:** [UNSW Canberra](https://research.unsw.edu.au/projects/toniot-datasets)
-- **Samples:** 461,043 flow records (after deduplication)
-- **Features:** 45 network flow features (min-max normalised to [0,1])
-- **Labels:** Binary — Normal (38%) / Attack (62%)
-
-Place `NF-TON-IoT.csv` in `data/raw/` before running preprocessing.
-
----
-
-## API Usage
-
-Start the inference server:
-```bash
-make api
-# or: uvicorn api.main:app --host 0.0.0.0 --port 8000
-```
-
-Send a prediction request:
-```bash
-curl -X POST http://localhost:8000/predict \
-  -H "Content-Type: application/json" \
-  -d '{"features": [0.1, 0.2, ...]}' # 45 min-max normalised values
-```
-
-Response:
-```json
-{
-  "attack_probability": 0.9234,
-  "is_attack": true,
-  "threshold": 0.5,
-  "latency_ms": 1.23
-}
-```
-
-API Documentation: http://localhost:8000/docs (Swagger UI)
-
----
-
-## Configuration
-
-All experiment parameters are in `configs/config.yaml`. Key settings:
-
-```yaml
-federated:
-  num_clients: 100
-  num_rounds: 100
-  local_epochs: 5
-
-byzantine:
-  fraction: 0.30
-  attack_type: "label_flipping"
-
-amfta:
-  alpha_s: 0.4    # Factor I weight
-  alpha_h: 0.3    # Factor II weight
-  alpha_q: 0.3    # Factor III weight
-  beta: 0.9       # EMA decay
-  tau_lower: 0.35
-  tau_upper: 0.55
-```
-
----
-
-## Testing
+A single configuration:
 
 ```bash
-make test-unit         # Fast unit tests (~10 seconds)
-make test-integration  # Full FL round simulation (~2 minutes)
-make test-coverage     # With coverage report
+python experiments/run_main.py --method amfta --attack label_flipping \
+    --byzantine_fraction 0.3 --num_clients 100 --num_rounds 25 --seeds 42
 ```
 
----
-
-## Docker
+The full study (resumable — re-run it and it skips finished configs):
 
 ```bash
-make docker-build      # Build image
-make docker-up         # Start all services (API + monitoring)
-make docker-test       # Run tests in container
-make docker-train      # Run quick training in container
+python experiments/run_focused_study.py
 ```
 
----
+Then build the result tables:
 
-## Reproducibility
+```bash
+python experiments/build_paper_tables.py
+```
 
-All experiments use 5 random seeds `{42, 123, 456, 789, 1024}` with:
-- PyTorch `manual_seed` + CUDA seed
-- NumPy `np.random.seed`
-- `torch.use_deterministic_algorithms(True)`
+## Layout
 
-Results are reported as mean ± std across 5 seeds.
+```
+amfta/aggregation/   trust factors, AMFTA, and the baseline aggregators
+amfta/attacks/       label flipping, gaussian noise, sign flipping, mimicry
+amfta/data/          TON_IoT preprocessing and Dirichlet partitioning
+training/            the federated training loop
+experiments/         experiment drivers and the table builder
+```
 
----
+## Notes
 
-
-## License
-
-MIT License — see [LICENSE](LICENSE).
-
----
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on submitting pull requests,
-reporting issues, and extending the framework with new aggregation methods or attacks.
+- Seeds used throughout: 42, 123, 456. Each cell is the mean over those three.
+- Rounds: 25, local epochs: 5, clients: 100, Dirichlet alpha 0.5.
+- We evaluate up to a 30% attacker fraction, consistent with the usual
+  honest-majority assumption.

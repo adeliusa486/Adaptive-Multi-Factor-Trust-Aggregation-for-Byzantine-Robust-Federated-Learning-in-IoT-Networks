@@ -112,9 +112,8 @@ class FedAvgAggregator(BaseAggregator):
 
         result: Dict[str, torch.Tensor] = {}
         for k in next(iter(updates.values())).keys():
-            result[k] = sum(
-                weights[cid] * updates[cid][k].float() for cid in updates
-            )
+            tensors = [weights[cid] * updates[cid][k].float() for cid in updates]
+            result[k] = torch.stack(tensors).sum(dim=0)
         return result
 
 
@@ -308,8 +307,10 @@ class FLTrustAggregator(BaseAggregator):
         ref_norm = ref_flat.norm() + 1e-8
 
         trust: Dict[int, float] = {}
+        client_norms: Dict[int, float] = {}
         for cid, update in updates.items():
             flat = torch.cat([v.float().flatten() for v in update.values()])
+            client_norms[cid] = flat.norm().item() + 1e-8
             cos = F.cosine_similarity(
                 flat.unsqueeze(0), ref_flat.unsqueeze(0)
             ).item()
@@ -320,14 +321,23 @@ class FLTrustAggregator(BaseAggregator):
             logger.warning("FLTrust: all trust scores are zero; using FedAvg fallback.")
             return _uniform_mean(updates)
 
+        # Deviation from canonical FLTrust: the published method rescales every
+        # client update to the *root* update norm.  Our server root set (200
+        # samples) yields a root norm far smaller than the clients' natural
+        # update norms (trained on ~18k samples each), so with global_lr=1.0 the
+        # global model stays frozen near initialisation and degenerates to the
+        # majority-class predictor.  We instead rescale to the *median* client
+        # norm — a robust, attack-resistant reference that preserves FLTrust's
+        # cosine-similarity trust weighting while restoring a healthy server
+        # step.  This makes FLTrust a fair, converging baseline.
+        sorted_norms = sorted(client_norms.values())
+        target_norm = sorted_norms[len(sorted_norms) // 2]  # median client norm
+
         result: Dict[str, torch.Tensor] = {}
         for k in ref.keys():
             weighted = torch.zeros_like(ref[k].float())
             for cid in updates:
-                client_flat = torch.cat([updates[cid][v].float().flatten() for v in updates[cid]])
-                client_norm = client_flat.norm() + 1e-8
-                # Normalise client update to root magnitude
-                scale = ref_norm / client_norm
+                scale = target_norm / client_norms[cid]
                 weighted += trust[cid] * updates[cid][k].float() * scale
             result[k] = weighted / total
 
@@ -335,6 +345,106 @@ class FLTrustAggregator(BaseAggregator):
 
     def __repr__(self) -> str:
         return f"FLTrustAggregator(root_dataset_size={self.root_dataset_size})"
+
+
+# ---------------------------------------------------------------------------
+# FedDBC — Density-Based Consensus Aggregation (competing baseline)
+# ---------------------------------------------------------------------------
+
+class FedDBCAggregator(BaseAggregator):
+    """FedDBC — Density-Based Consensus aggregation (re-implementation).
+
+    Reproduction of the FedDBC defense for federated NIDS (2026): cluster
+    client updates by pairwise cosine distance using adaptively-calibrated
+    DBSCAN, keep the dominant (largest) consensus cluster, discard smaller
+    clusters and noise points, then apply Trimmed Mean within the surviving
+    cluster to suppress residual intra-cluster outliers.
+
+    Requires no trusted server data, no persistent state, and no prior
+    attacker count.  Guarantees are conditional on an honest majority and
+    geometric separability of benign vs. malicious updates.
+
+    Parameters
+    ----------
+    trim_fraction : float
+        Trimmed-mean fraction applied within the selected cluster. Default 0.1.
+    min_cluster_frac : float
+        DBSCAN min_samples as a fraction of N (core-point density). Default 0.25.
+    eps_percentile : float
+        Percentile of k-NN cosine distances used to auto-calibrate eps.
+        Default 50 (median k-distance).
+    """
+
+    def __init__(
+        self,
+        trim_fraction: float = 0.1,
+        min_cluster_frac: float = 0.25,
+        eps_percentile: float = 50.0,
+    ) -> None:
+        self.trim_fraction = trim_fraction
+        self.min_cluster_frac = min_cluster_frac
+        self.eps_percentile = eps_percentile
+
+    def aggregate(
+        self,
+        global_model: nn.Module,
+        updates: UpdateDict,
+        **kwargs,
+    ) -> Dict[str, torch.Tensor]:
+        import numpy as np
+        from sklearn.cluster import DBSCAN
+
+        client_ids = list(updates.keys())
+        n = len(client_ids)
+        flat = _flatten_updates(updates)
+        M = torch.stack([flat[cid] for cid in client_ids])  # [n, d]
+
+        # Pairwise cosine distance matrix (1 - cosine similarity), clamped >= 0
+        Mn = F.normalize(M, dim=1)
+        cos_sim = (Mn @ Mn.t()).clamp(-1.0, 1.0)
+        dist = (1.0 - cos_sim).clamp(min=0.0).cpu().numpy()
+        np.fill_diagonal(dist, 0.0)
+
+        min_samples = max(2, int(self.min_cluster_frac * n))
+
+        # Adaptive eps: percentile of each point's k-th nearest-neighbour distance
+        k = min(min_samples, n - 1)
+        knn = np.sort(dist, axis=1)[:, k]  # k-th NN distance per point
+        eps = float(np.percentile(knn, self.eps_percentile))
+        if eps <= 0.0:
+            eps = float(np.percentile(dist[dist > 0], 50)) if np.any(dist > 0) else 1e-6
+
+        labels = DBSCAN(eps=eps, min_samples=min_samples, metric="precomputed").fit_predict(dist)
+
+        # Select the dominant (largest) non-noise cluster
+        valid = labels[labels >= 0]
+        if valid.size == 0:
+            logger.warning("FedDBC: DBSCAN found no dense cluster; falling back to Trimmed Mean.")
+            selected = client_ids
+        else:
+            vals, counts = np.unique(valid, return_counts=True)
+            dominant = vals[int(np.argmax(counts))]
+            selected = [client_ids[i] for i in range(n) if labels[i] == dominant]
+
+        # Trimmed Mean within the surviving cluster
+        sel_updates = {cid: updates[cid] for cid in selected}
+        m = len(sel_updates)
+        trim_k = int(m * self.trim_fraction)
+        if m == 0:
+            return _uniform_mean(updates)
+        if trim_k * 2 >= m:
+            return _uniform_mean(sel_updates)
+
+        result: Dict[str, torch.Tensor] = {}
+        for key in next(iter(sel_updates.values())).keys():
+            stacked = torch.stack([sel_updates[cid][key].float() for cid in sel_updates])
+            sorted_vals, _ = torch.sort(stacked, dim=0)
+            trimmed = sorted_vals[trim_k : m - trim_k]
+            result[key] = trimmed.mean(dim=0)
+        return result
+
+    def __repr__(self) -> str:
+        return f"FedDBCAggregator(trim_fraction={self.trim_fraction})"
 
 
 # ---------------------------------------------------------------------------
@@ -346,6 +456,7 @@ AGGREGATOR_REGISTRY = {
     "krum": KrumAggregator,
     "trimmed_mean": TrimmedMeanAggregator,
     "fltrust": FLTrustAggregator,
+    "feddbc": FedDBCAggregator,
 }
 
 

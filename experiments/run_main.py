@@ -36,9 +36,9 @@ from training.federated_runner import FederatedRunner, RunConfig
 
 logger = logging.getLogger(__name__)
 
-METHODS = ["fedavg", "trimmed_mean", "krum", "fltrust", "amfta"]
+METHODS = ["fedavg", "trimmed_mean", "krum", "fltrust", "feddbc", "amfta", "amfta_noq"]
 BYZ_RATES = [0.10, 0.20, 0.30, 0.40]
-ATTACK_TYPES = ["label_flipping", "gaussian_noise"]
+ATTACK_TYPES = ["label_flipping", "gaussian_noise", "sign_flipping", "mimicry"]
 
 
 def run_single(
@@ -61,6 +61,7 @@ def run_single(
             method=method,
             num_clients=args.num_clients,
             num_rounds=args.num_rounds,
+            local_epochs=args.local_epochs,
             byzantine_fraction=byzantine_fraction,
             attack_type=attack_type if byzantine_fraction > 0 else "none",
             seed=seed,
@@ -100,6 +101,7 @@ def main():
     parser.add_argument("--attack", choices=ATTACK_TYPES, default="label_flipping")
     parser.add_argument("--num_clients", type=int, default=100)
     parser.add_argument("--num_rounds", type=int, default=100)
+    parser.add_argument("--local_epochs", type=int, default=5)
     parser.add_argument("--seeds", type=int, nargs="+", default=PAPER_SEEDS)
     parser.add_argument("--all", action="store_true", help="Run all methods × all Byzantine rates")
     parser.add_argument("--use_synthetic", action="store_true",
@@ -115,8 +117,8 @@ def main():
 
     if args.all:
         methods_to_run = METHODS
-        byz_rates = [0.30]  # Only run for 30% byzantine fraction for this paper run
-        attacks_to_run = ["label_flipping"] # Only label flipping
+        byz_rates = BYZ_RATES
+        attacks_to_run = ATTACK_TYPES
     else:
         methods_to_run = [args.method]
         byz_rates = [args.byzantine_fraction]

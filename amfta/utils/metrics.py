@@ -95,6 +95,59 @@ def evaluate_model(
     return metrics
 
 
+@torch.no_grad()
+def evaluate_model_fast(
+    model: nn.Module,
+    X: torch.Tensor,
+    y: torch.Tensor,
+    threshold: float = 0.5,
+    batch_size: int = 65536,
+    device: Optional[torch.device] = None,
+) -> MetricsDict:
+    """Fully-vectorised GPU evaluation for large test sets.
+
+    Computes accuracy/precision/recall/f1 by accumulating TP/FP/TN/FN counts
+    on the GPU in large batches.  Avoids the per-sample Python-list / sklearn
+    path in ``evaluate_model``, which is ~100x slower on multi-million-sample
+    test sets.  Numerically identical results (same 0.5 threshold).
+
+    Parameters
+    ----------
+    model : nn.Module       Trained model.
+    X, y  : torch.Tensor    Test features / binary labels (CPU or GPU).
+    threshold : float       Decision threshold.
+    batch_size : int        Inference batch size.
+    device : torch.device   Compute device. None = auto-detect.
+    """
+    device = device or (torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
+    model = model.to(device)
+    model.eval()
+
+    tp = fp = tn = fn = 0
+    n = X.shape[0]
+    for i in range(0, n, batch_size):
+        X_b = X[i:i + batch_size].to(device, non_blocking=True).float()
+        y_b = y[i:i + batch_size].to(device, non_blocking=True).float()
+        preds = (model(X_b) >= threshold).float()
+        tp += torch.sum((preds == 1) & (y_b == 1)).item()
+        fp += torch.sum((preds == 1) & (y_b == 0)).item()
+        tn += torch.sum((preds == 0) & (y_b == 0)).item()
+        fn += torch.sum((preds == 0) & (y_b == 1)).item()
+
+    total = tp + fp + tn + fn
+    accuracy = (tp + tn) / total if total else 0.0
+    precision = tp / (tp + fp) if (tp + fp) else 0.0
+    recall = tp / (tp + fn) if (tp + fn) else 0.0
+    f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) else 0.0
+
+    return {
+        "accuracy": float(accuracy),
+        "f1": float(f1),
+        "precision": float(precision),
+        "recall": float(recall),
+    }
+
+
 def compute_confusion(
     model: nn.Module,
     X: Union[np.ndarray, torch.Tensor],

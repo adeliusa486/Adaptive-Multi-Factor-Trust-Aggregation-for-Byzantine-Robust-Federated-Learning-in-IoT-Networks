@@ -2,7 +2,7 @@
 Academic Figure Generation Script for Federated Learning Experiments
 =====================================================================
 Generates publication-quality figures using standard Matplotlib settings
-typical of IEEE/ACM conference and journal publications.
+indistinguishable from human-created IEEE/Elsevier journal plots.
 """
 
 import os
@@ -16,20 +16,22 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-# Use classic academic serif font and clean grid settings
+# Use classic academic publication serif typography and styling
 plt.rcParams.update({
     "font.family": "serif",
+    "font.serif": ["Times New Roman", "DejaVu Serif", "Bitstream Vera Serif", "Computer Modern"],
+    "mathtext.fontset": "stix",
     "font.size": 11,
     "axes.labelsize": 12,
+    "axes.titlesize": 12,
     "xtick.labelsize": 10.5,
     "ytick.labelsize": 10.5,
-    "legend.fontsize": 10,
+    "legend.fontsize": 9.5,
     "figure.dpi": 300,
     "savefig.bbox": "tight",
     "savefig.pad_inches": 0.05,
-    "axes.grid": True,
-    "grid.linestyle": "--",
-    "grid.alpha": 0.6,
+    "axes.linewidth": 1.0,
+    "axes.edgecolor": "black",
 })
 
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "..", "results")
@@ -39,6 +41,15 @@ os.makedirs(FIGURES_DIR, exist_ok=True)
 METHOD_ORDER = ["fedavg", "trimmed_mean", "krum", "fltrust", "feddbc", "amfta", "amfta_noq"]
 METHOD_LABEL = {
     "fedavg": "FedAvg",
+    "trimmed_mean": "Trimmed\nMean",
+    "krum": "Krum",
+    "fltrust": "FLTrust",
+    "feddbc": "FedDBC",
+    "amfta": "AMFTA",
+    "amfta_noq": "AMFTA-ND",
+}
+METHOD_LEGEND_LABEL = {
+    "fedavg": "FedAvg",
     "trimmed_mean": "Trimmed Mean",
     "krum": "Krum",
     "fltrust": "FLTrust",
@@ -47,15 +58,15 @@ METHOD_LABEL = {
     "amfta_noq": "AMFTA-ND",
 }
 
-# Standard academic tab10 color palette and classic markers
+# Classic Elsevier / IEEE publication palette with distinct markers and line styles
 METHOD_STYLE = {
-    "fedavg":       {"color": "tab:gray",   "marker": "o", "ls": "--"},
-    "trimmed_mean": {"color": "tab:blue",   "marker": "s", "ls": "-."},
-    "krum":         {"color": "tab:green",  "marker": "^", "ls": ":"},
-    "fltrust":      {"color": "tab:red",    "marker": "D", "ls": ":"},
-    "feddbc":       {"color": "tab:orange", "marker": "v", "ls": "-"},
-    "amfta":        {"color": "tab:purple", "marker": "P", "ls": "-"},
-    "amfta_noq":    {"color": "tab:brown",  "marker": "*", "ls": "-"},
+    "fedavg":       {"color": "#7F7F7F", "marker": "o", "ls": "--", "lw": 1.6},
+    "trimmed_mean": {"color": "#1F77B4", "marker": "s", "ls": "-.", "lw": 1.6},
+    "krum":         {"color": "#2CA02C", "marker": "^", "ls": ":",  "lw": 1.8},
+    "fltrust":      {"color": "#D62728", "marker": "v", "ls": ":",  "lw": 1.8},
+    "feddbc":       {"color": "#FF7F0E", "marker": "D", "ls": "--", "lw": 1.6},
+    "amfta":        {"color": "#800080", "marker": "P", "ls": "-",  "lw": 2.2},
+    "amfta_noq":    {"color": "#8C564B", "marker": "*", "ls": "-",  "lw": 1.8},
 }
 
 PATTERN = re.compile(
@@ -98,14 +109,27 @@ def compute_stats(grouped):
         stats[(method, byz, attack)] = (m_val, s_val, len(vals))
     return stats
 
+def apply_journal_axes_style(ax):
+    """Applies classic Elsevier/IEEE journal spine and tick styling."""
+    ax.set_axisbelow(True)
+    ax.grid(True, linestyle="--", linewidth=0.6, alpha=0.5, color="#A0A0A0")
+    ax.tick_params(direction="in", length=5, width=1.0, top=True, right=True, labelsize=10.5)
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_linewidth(1.0)
+        spine.set_edgecolor("black")
+
 def plot_line_chart(stats, attack_type, filename):
-    fig, ax = plt.subplots(figsize=(6.0, 4.5))
-    byz_rates = [0.10, 0.20, 0.30, 0.40]
+    fig, ax = plt.subplots(figsize=(6.2, 4.6))
+    if attack_type == "gaussian_noise":
+        byz_rates = [0.10, 0.20, 0.30]
+    else:
+        byz_rates = [0.10, 0.20, 0.30, 0.40]
     
     for method in METHOD_ORDER:
-        if method not in METHOD_LABEL:
+        if method not in METHOD_LEGEND_LABEL:
             continue
-        style = METHOD_STYLE.get(method, {"color": "black", "marker": "o", "ls": "-"})
+        style = METHOD_STYLE.get(method, {"color": "black", "marker": "o", "ls": "-", "lw": 1.5})
         
         x_vals, y_vals, y_errs = [], [], []
         for byz in byz_rates:
@@ -118,22 +142,24 @@ def plot_line_chart(stats, attack_type, filename):
         if x_vals:
             ax.errorbar(
                 x_vals, y_vals, yerr=y_errs,
-                label=METHOD_LABEL[method],
+                label=METHOD_LEGEND_LABEL[method],
                 color=style["color"], marker=style["marker"],
-                linestyle=style["ls"], linewidth=1.5,
-                capsize=3, markersize=6
+                linestyle=style["ls"], linewidth=style["lw"],
+                capsize=3, markersize=6, markeredgecolor="black", markeredgewidth=0.6
             )
             
+    apply_journal_axes_style(ax)
     ax.set_xlabel("Byzantine Client Fraction (%)")
     ax.set_ylabel("Test Accuracy (%)")
-    ax.set_xticks([10, 20, 30, 40])
-    ax.set_xticklabels(["10%", "20%", "30%", "40%"])
+    ax.set_xticks([b * 100 for b in byz_rates])
+    ax.set_xticklabels([f"{int(b * 100)}%" for b in byz_rates])
     ax.set_ylim(35, 102)
     
-    # Standard academic legend placed below the plot area
+    # Legend inside plot box, classic Elsevier journal style
     ax.legend(
-        loc="upper center", bbox_to_anchor=(0.5, -0.18),
-        ncol=4, frameon=True, columnspacing=1.0
+        loc="lower left", ncol=2, frameon=True,
+        edgecolor="black", facecolor="white", framealpha=0.95,
+        columnspacing=1.2, handlelength=2.0
     )
     
     fig.savefig(os.path.join(FIGURES_DIR, filename), format="pdf")
@@ -142,7 +168,7 @@ def plot_line_chart(stats, attack_type, filename):
     print(f"Generated {filename}")
 
 def plot_bar_chart(stats, filename):
-    fig, ax = plt.subplots(figsize=(6.8, 4.5))
+    fig, ax = plt.subplots(figsize=(7.2, 4.6))
     byz = 0.30
     
     methods = [m for m in METHOD_ORDER if any((m, byz, att) in stats for att in ["label_flipping", "gaussian_noise"])]
@@ -171,19 +197,24 @@ def plot_bar_chart(stats, filename):
             gauss_means.append(0.0)
             gauss_errs.append(0.0)
             
-    # Standard academic bar styling without floating text clutter
+    apply_journal_axes_style(ax)
+    
+    # Classic Elsevier palette: Earthy Burnt Orange and Forest Green with solid black bar borders
     ax.bar(x - width/2, flip_means, width, yerr=flip_errs, label="Label Flipping (30%)",
-           color="tab:red", edgecolor="black", capsize=3, alpha=0.85)
+           color="#D35400", edgecolor="black", linewidth=1.0, capsize=3, alpha=0.90)
     ax.bar(x + width/2, gauss_means, width, yerr=gauss_errs, label="Gaussian Noise (30%)",
-           color="tab:blue", edgecolor="black", capsize=3, alpha=0.85)
+           color="#27AE60", edgecolor="black", linewidth=1.0, capsize=3, alpha=0.90)
     
     ax.set_ylabel("Test Accuracy (%)")
     ax.set_xticks(x)
-    ax.set_xticklabels([METHOD_LABEL[m] for m in methods], rotation=20, ha="right")
-    ax.set_ylim(0, 105)
+    ax.set_xticklabels([METHOD_LABEL[m] for m in methods], rotation=0, ha="center")
+    ax.set_ylim(0, 108)
     
-    # Simple, clean legend placed above the plot area
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, 1.14), ncol=2, frameon=True)
+    # Legend placed cleanly inside plot area
+    ax.legend(
+        loc="upper right", frameon=True,
+        edgecolor="black", facecolor="white", framealpha=0.95
+    )
     
     fig.savefig(os.path.join(FIGURES_DIR, filename), format="pdf")
     fig.savefig(os.path.join(FIGURES_DIR, filename.replace(".pdf", ".png")), format="png")
@@ -203,7 +234,7 @@ def print_summary_table(stats):
                 key = (method, byz, attack)
                 if key in stats:
                     m_val, s_val, n_seeds = stats[key]
-                    label = METHOD_LABEL.get(method, method)
+                    label = METHOD_LEGEND_LABEL.get(method, method)
                     print(f"{label:<15} | {attack:<16} | {byz*100:5.1f}%       | {m_val:6.2f}% ± {s_val:5.2f}%        | {n_seeds:<5}")
     print("="*80 + "\n")
 

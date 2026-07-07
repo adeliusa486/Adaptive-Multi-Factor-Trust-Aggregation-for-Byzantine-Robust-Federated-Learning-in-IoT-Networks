@@ -200,10 +200,10 @@ def plot_bar_chart(stats, filename):
     apply_journal_axes_style(ax)
     
     # Classic Elsevier palette: Earthy Burnt Orange and Forest Green with solid black bar borders
-    ax.bar(x - width/2, flip_means, width, yerr=flip_errs, label="Label Flipping (30%)",
-           color="#D35400", edgecolor="black", linewidth=1.0, capsize=3, alpha=0.90)
-    ax.bar(x + width/2, gauss_means, width, yerr=gauss_errs, label="Gaussian Noise (30%)",
-           color="#27AE60", edgecolor="black", linewidth=1.0, capsize=3, alpha=0.90)
+    ax.bar(x - width/2, flip_means, width, label="Label Flipping (30%)",
+           color="#D35400", edgecolor="black", linewidth=1.0, alpha=0.90)
+    ax.bar(x + width/2, gauss_means, width, label="Gaussian Noise (30%)",
+           color="#27AE60", edgecolor="black", linewidth=1.0, alpha=0.90)
     
     ax.set_ylabel("Test Accuracy (%)")
     ax.set_xticks(x)

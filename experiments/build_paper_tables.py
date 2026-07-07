@@ -24,7 +24,7 @@ from collections import defaultdict
 from statistics import mean, pstdev
 
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "..", "results")
-METHOD_ORDER = ["fedavg", "trimmed_mean", "krum", "fltrust", "feddbc", "amfta"]
+METHOD_ORDER = ["fedavg", "trimmed_mean", "krum", "fltrust", "feddbc", "amfta", "amfta_noq"]
 METHOD_LABEL = {
     "fedavg": "FedAvg",
     "trimmed_mean": "Trimmed Mean",
@@ -32,6 +32,7 @@ METHOD_LABEL = {
     "fltrust": "FLTrust",
     "feddbc": "FedDBC",
     "amfta": "AMFTA",
+    "amfta_noq": "AMFTA-ND",
 }
 PATTERN = re.compile(
     r"^(?P<method>[a-z_]+)_byz(?P<byz>[0-9.]+)_(?P<attack>[a-z_]+)_seed(?P<seed>\d+)_(?P<ts>\d{8}_\d{6})\.json$"

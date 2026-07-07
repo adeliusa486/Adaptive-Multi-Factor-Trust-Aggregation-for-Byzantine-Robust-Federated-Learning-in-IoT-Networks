@@ -80,10 +80,11 @@ The full study (resumable — re-run it and it skips finished configs):
 python experiments/run_focused_study.py
 ```
 
-Then build the result tables:
+Then build the result tables and publication figures:
 
 ```bash
 python experiments/build_paper_tables.py
+python experiments/build_paper_figures.py
 ```
 
 ## Layout

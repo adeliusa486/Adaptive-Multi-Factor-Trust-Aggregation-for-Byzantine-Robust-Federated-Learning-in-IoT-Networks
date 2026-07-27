@@ -22,15 +22,15 @@ import sys
 HERE = os.path.dirname(__file__)
 SWEEP = os.path.join(HERE, "run_sweep_resumable.py")
 
-SEEDS = ["42", "123", "456"]
+SEEDS = ["42", "123", "456", "789", "1024"]
 ROUNDS = "25"
 SINCE = "20260626_000000"  # only count results produced after the new attacks/FedDBC landed
 
 PHASES = [
-    ("label_flipping", ["0.1", "0.2", "0.3", "0.4"]),
-    ("sign_flipping",  ["0.3", "0.4"]),
-    ("mimicry",        ["0.3", "0.4"]),
-    ("gaussian_noise", ["0.3", "0.4"]),
+    ("label_flipping", ["0.0", "0.1", "0.2", "0.3", "0.4", "0.45"]),
+    ("sign_flipping",  ["0.0", "0.1", "0.2", "0.3", "0.4", "0.45"]),
+    ("mimicry",        ["0.0", "0.1", "0.2", "0.3", "0.4", "0.45"]),
+    ("gaussian_noise", ["0.0", "0.1", "0.2", "0.3", "0.4", "0.45"]),
 ]
 
 

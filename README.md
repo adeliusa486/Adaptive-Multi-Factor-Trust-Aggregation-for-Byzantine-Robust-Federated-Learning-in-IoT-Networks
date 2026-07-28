@@ -4,7 +4,7 @@
 
 ![Radar Chart](figures/fig_radar.png)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)([(https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)[https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python Version](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11-blue.svg)](https://www.python.org/downloads/)
 [![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![PyTorch](https://img.shields.io/badge/PyTorch-%E2%89%A52.1.0-ee4c2c.svg)](https://pytorch.org/)
@@ -245,6 +245,8 @@ python experiments/build_paper_figures.py
 
 The following tables summarize the verified mean test classification accuracy ($\%$) and standard deviation evaluated over the final $5$ communication rounds across $3$ independent random seeds ($42, 123, 456$).
 
+![Label Flipping Heatmap](figures/fig_heatmap_label.png)
+
 ### Table 1: Label Flipping Attack
 *Federated training across $100$ clients ($5$ local epochs, Dirichlet $\alpha=0.5, T=25$ rounds).*
 
@@ -257,6 +259,8 @@ The following tables summarize the verified mean test classification accuracy ($
 | **FedDBC** | $92.08 \pm 1.26$ | $85.56 \pm 5.37$ | $71.99 \pm 2.36$ | $61.00 \pm 2.96$ |
 | **AMFTA** (Ours) | $\mathbf{93.06 \pm 1.18}$ | $\mathbf{92.81 \pm 1.11}$ | $80.32 \pm 9.64$ | $54.63 \pm 5.11$ |
 | **AMFTA-ND** (Ours, No Buffer) | $92.47 \pm 1.09$ | $92.27 \pm 1.47$ | $\mathbf{91.69 \pm 0.99}$ | `--` |
+
+![Gaussian Noise Heatmap](figures/fig_heatmap_gauss.png)
 
 ### Table 2: Gaussian Noise Injection Attack
 *High-variance isotropic noise corruption under identical non-IID partitioning parameters.*

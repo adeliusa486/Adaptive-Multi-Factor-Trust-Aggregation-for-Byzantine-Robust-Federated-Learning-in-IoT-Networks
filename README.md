@@ -100,7 +100,8 @@ make install-dev
 Malicious edge nodes systematically invert training labels prior to local training, forcing the global model to learn incorrect decision boundaries.
 
 <p align="center">
-  <img src="figures/fig_heatmap_label.png" width="500" />
+  <img src="figures/fig_conv_label30.png" width="48%" />
+  <img src="figures/fig_heatmap_label.png" width="48%" />
 </p>
 
 ### 2. Gaussian Noise Injection (Model Poisoning)
@@ -108,7 +109,8 @@ Malicious edge nodes systematically invert training labels prior to local traini
 Adversaries corrupt local model weight updates by adding high-variance isotropic Gaussian noise ($\mathcal{N}(0, \sigma^2)$) to disrupt global convergence.
 
 <p align="center">
-  <img src="figures/fig_heatmap_gauss.png" width="500" />
+  <img src="figures/fig_conv_gauss30.png" width="48%" />
+  <img src="figures/fig_heatmap_gauss.png" width="48%" />
 </p>
 
 ---

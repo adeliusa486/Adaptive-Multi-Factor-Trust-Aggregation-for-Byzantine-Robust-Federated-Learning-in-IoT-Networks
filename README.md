@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="figures/fig_radar.png" width="800" alt="AMFTA Radar Chart Performance Breakdown" />
+  <img src="figures/fig_radar.png" width="400" alt="AMFTA Radar Chart Performance Breakdown" />
 </p>
 
 # AMFTA-FL: Adaptive Multi-Factor Trust Aggregation
@@ -14,18 +14,7 @@ An engineering-grade research software artifact and comparative benchmarking fra
 
 ---
 
-## 📑 Table of Contents
-1. [Project Overview](#-project-overview)
-2. [Quick Start (Zero-Download)](#-quick-start-zero-download)
-3. [Installation](#-installation)
-4. [Evaluated Threat Models & Defenses](#-evaluated-threat-models--defenses)
-5. [Empirical Results](#-empirical-results)
-6. [Repository Architecture](#-repository-architecture)
-7. [Experimental Workflow](#-experimental-workflow)
-8. [Testing & Quality Assurance](#-testing--quality-assurance)
-9. [Citation & License](#-citation--license)
 
----
 
 ## 🔍 Project Overview
 
@@ -37,7 +26,7 @@ Standard federated aggregation protocols (e.g., `FedAvg`) are highly vulnerable 
 
 ---
 
-## 🚀 Quick Start (Zero-Download)
+## 🚀 Peer Reviewer Quick Start (Zero-Download)
 
 The benchmarking suite includes a `--use_synthetic` flag, allowing you to instantly run the AMFTA training engine with synthetically generated non-IID data without downloading the multi-gigabyte TON_IoT dataset.
 
@@ -194,17 +183,3 @@ make format-check
 
 ---
 
-## 📜 Citation & License
-
-If you use AMFTA or this benchmarking framework in your research, please cite our work:
-
-```bibtex
-@article{ahmad2026amfta,
-  title={When Do Byzantine-Robust Aggregators Fail? A Measurement Study on Federated Intrusion Detection under Non-IID IoT Traffic},
-  author={Ahmad, Adeel and Akarma, Ali and Syed, Touqeer Ali},
-  journal={Pending Publication},
-  year={2026}
-}
-```
-
-This software artifact is released under the **MIT License**.

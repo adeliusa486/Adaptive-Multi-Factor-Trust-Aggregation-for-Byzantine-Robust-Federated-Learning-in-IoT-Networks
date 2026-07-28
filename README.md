@@ -10,7 +10,7 @@
 [![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![PyTorch](https://img.shields.io/badge/PyTorch-%E2%89%A52.1.0-ee4c2c.svg)](https://pytorch.org/)
 
-**[?? Download Full Paper (PDF)](paper/main.pdf)**
+
 
 An engineering-grade research software artifact and comparative benchmarking framework for evaluating **Byzantine-resilient server-side aggregation strategies** in non-IID federated network intrusion detection systems (NIDS). Evaluated on the real-world **TON_IoT** smart city telemetry dataset under diverse model-poisoning and data-poisoning threat models.
 
@@ -94,21 +94,11 @@ amfta-fl/
 +-- evaluation/                 # Metrics calculation and statistical evaluation
 +-- experiments/                # Experiment drivers, table and figure builders
 +-- figures/                    # Generated publication-quality PDF and PNG plots
-+-- paper/                      # Final compiled PDFs and LaTeX source code
 +-- results/                    # Serialized JSON run logs across all evaluated seeds
 +-- tests/                      # Automated unit and integration test suites (pytest)
 ```
 
-### Reproducing the Paper
-All tables and visual charts in the research manuscript are generated programmatically directly from the raw JSON logs in `results/`. 
 
-```bash
-# Compile the summary tables (outputs LaTeX and Markdown)
-python experiments/build_paper_tables.py
-
-# Generate publication figures (outputs PDF and PNGs)
-python experiments/build_paper_figures.py
-```
 
 ---
 

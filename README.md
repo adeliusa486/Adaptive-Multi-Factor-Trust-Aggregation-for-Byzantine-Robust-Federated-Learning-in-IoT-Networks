@@ -19,7 +19,7 @@ An engineering-grade research software artifact and comparative benchmarking fra
 ## Project Overview
 
 <p align="center">
-  <img src="figures/fig1_arch.jpg" width="800" alt="AMFTA System Architecture" />
+  <img src="figures/fig1_arch.png" width="800" alt="AMFTA System Architecture" />
 </p>
 
 Standard federated aggregation protocols (e.g., `FedAvg`) are highly vulnerable to Byzantine failures—situations where malicious or compromised edge nodes inject poisoned models or corrupt data into the global training process. Defenses like Krum or Trimmed Mean degrade significantly under highly Non-IID data distributions (such as Dirichlet $\alpha = 0.5$) common in IoT networks.

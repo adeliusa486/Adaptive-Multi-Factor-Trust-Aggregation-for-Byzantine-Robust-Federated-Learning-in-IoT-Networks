@@ -1,6 +1,4 @@
-<p align="center">
-  <img src="figures/fig_radar.png" width="400" alt="AMFTA Radar Chart Performance Breakdown" />
-</p>
+
 
 # AMFTA-FL: Adaptive Multi-Factor Trust Aggregation
 ### Byzantine-Robust Federated Learning in Non-IID Smart City IoT Networks

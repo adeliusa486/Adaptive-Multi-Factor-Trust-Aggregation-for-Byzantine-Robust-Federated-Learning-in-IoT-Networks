@@ -67,6 +67,11 @@ Standard federated aggregation protocols like **FedAvg** are highly vulnerable t
 ### 1. Label Flipping (Data Poisoning)
 
 <p align="center">
+  <img src="figures/fig_lineflip.png" width="500" />
+</p>
+
+
+<p align="center">
   <img src="figures/fig_heatmap_label.png" width="500" />
 </p>
 
@@ -74,6 +79,11 @@ Malicious edge nodes systematically invert training labels prior to local traini
 - **Result:** Coordinate-wise trimming and density clustering perform well initially but degrade rapidly past 30% attacker fractions. AMFTA-ND synthesizes historical trust momentum and density clustering to maintain **>91% accuracy** even when 30% of the network is actively poisoning the data.
 
 ### 2. Gaussian Noise Injection (Model Poisoning)
+
+<p align="center">
+  <img src="figures/fig_linegauss.png" width="500" />
+</p>
+
 
 <p align="center">
   <img src="figures/fig_heatmap_gauss.png" width="500" />

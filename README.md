@@ -160,10 +160,12 @@ To accurately reproduce the full benchmarks reported in the publication, follow 
    python experiments/run_full_study.py --log_level INFO
    ```
 3. **Compile Figures & Tables**
-   Parses the serialized JSON artifacts in `results/` to generate visual plots.
+   Parses the serialized JSON artifacts in `results/` to generate the exact visual plots found in this README and the publication.
    ```bash
    python experiments/build_paper_figures.py
    python experiments/build_paper_tables.py
+   python experiments/make_advanced_figures.py  # Generates Heatmaps & Radar charts
+   python experiments/make_extra_figures.py     # Generates Convergence charts
    ```
 
 ---

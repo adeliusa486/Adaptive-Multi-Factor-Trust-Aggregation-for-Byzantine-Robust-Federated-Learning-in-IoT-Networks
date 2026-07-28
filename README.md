@@ -16,7 +16,7 @@ An engineering-grade research software artifact and comparative benchmarking fra
 
 
 
-## 🔍 Project Overview
+## Project Overview
 
 Standard federated aggregation protocols (e.g., `FedAvg`) are highly vulnerable to Byzantine failures—situations where malicious or compromised edge nodes inject poisoned models or corrupt data into the global training process. Defenses like Krum or Trimmed Mean degrade significantly under highly Non-IID data distributions (such as Dirichlet $\alpha = 0.5$) common in IoT networks.
 
@@ -26,7 +26,7 @@ Standard federated aggregation protocols (e.g., `FedAvg`) are highly vulnerable 
 
 ---
 
-## 🚀 Peer Reviewer Quick Start (Zero-Download)
+## Peer Reviewer Quick Start (Zero-Download)
 
 The benchmarking suite includes a `--use_synthetic` flag, allowing you to instantly run the AMFTA training engine with synthetically generated non-IID data without downloading the multi-gigabyte TON_IoT dataset.
 
@@ -67,7 +67,7 @@ global_model = aggregator.aggregate(
 
 ---
 
-## ⚙️ Installation
+## Installation
 
 > [!NOTE]
 > This repository uses `make` targets for streamlined installation and testing. Python 3.9+ is required.
@@ -89,7 +89,7 @@ make install-dev
 
 ---
 
-## 🛡️ Evaluated Threat Models & Defenses
+## Evaluated Threat Models & Defenses
 
 ### 1. Label Flipping (Data Poisoning)
 
@@ -111,7 +111,7 @@ Adversaries corrupt local model weight updates by adding high-variance isotropic
 
 ---
 
-## 📊 Empirical Results
+## Empirical Results
 
 Below is a subset of the empirical results demonstrating the F1-Score degradation under a 30% Label Flipping attack fraction.
 
@@ -127,7 +127,7 @@ Below is a subset of the empirical results demonstrating the F1-Score degradatio
 
 ---
 
-## 📂 Repository Architecture
+## Repository Architecture
 
 ```text
 amfta-fl/
@@ -144,7 +144,7 @@ amfta-fl/
 
 ---
 
-## 🧪 Experimental Workflow
+## Experimental Workflow
 
 To accurately reproduce the full benchmarks reported in the publication, follow this pipeline:
 
@@ -166,7 +166,7 @@ To accurately reproduce the full benchmarks reported in the publication, follow 
 
 ---
 
-## 🚥 Testing & Quality Assurance
+## Testing & Quality Assurance
 
 This framework maintains strict CI/CD guidelines. Ensure all tests pass before submitting pull requests.
 

@@ -57,6 +57,7 @@ def main():
     ap.add_argument("--local_epochs", type=int, default=5)
     ap.add_argument("--num_clients", type=int, default=100)
     ap.add_argument("--since", default=DEFAULT_SINCE)
+    ap.add_argument("--use_synthetic", action="store_true")
     args = ap.parse_args()
 
     combos = [
@@ -92,6 +93,8 @@ def main():
             "--seeds", str(seed),
             "--log_interval", "10",
         ]
+        if args.use_synthetic:
+            cmd.append("--use_synthetic")
         r = subprocess.run(cmd, cwd=ROOT)
         if r.returncode != 0:
             print(f"   !! returncode {r.returncode} for {method} byz{byz} {attack} seed{seed}", flush=True)

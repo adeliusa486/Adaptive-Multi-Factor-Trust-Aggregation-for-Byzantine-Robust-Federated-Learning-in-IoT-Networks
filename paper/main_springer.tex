@@ -1,0 +1,616 @@
+\documentclass[sn-mathphys,Numbered]{sn-jnl}
+
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{mathrsfs}
+\usepackage[title]{appendix}
+\usepackage{xcolor}
+\usepackage{textcomp}
+\usepackage{manyfoot}
+\usepackage{booktabs}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{array}
+\usepackage{url}
+\def\UrlBreaks{\do\/\do\-\do\_}
+\usepackage{float}
+
+\definecolor{clrA}{HTML}{3F6FA8}  % blue
+\definecolor{clrB}{RGB}{255,127,14}
+\definecolor{clrC}{RGB}{44,160,44}
+\definecolor{clrD}{HTML}{D9622B}  % orange/red
+\definecolor{clrE}{RGB}{148,103,189}
+
+\graphicspath{{figures/},{images/}}
+
+\begin{document}
+
+\title[When Do Byzantine-Robust Aggregators Fail?]{\textcolor{red}{When Do Byzantine-Robust Aggregators Fail? A Measurement Study on Federated Intrusion Detection under Non-IID IoT Traffic}}
+
+\author*[1]{\fnm{Adeel} \sur{Ahmad}}\email{443057803@stu.iu.edu.sa}
+\author[1]{\fnm{Ali} \sur{Akarma}}
+\author[1]{\fnm{Touqeer Ali} \sur{Syed}}
+
+\affil*[1]{\orgdiv{Department of Computer Science}, \orgname{Islamic University of Madinah}, \city{Madinah}, \country{Saudi Arabia}}
+
+\abstract{\color{blue}
+Federated Learning (FL) empowers Intrusion Detection Systems (IDS) to learn from distributed Internet of Things (IoT) devices without sharing raw data. However, the heterogeneous (non-IID) nature of IoT traffic renders standard FL highly vulnerable to Byzantine attacks, where malicious participants poison the global model. Existing Byzantine-robust aggregators often assume identically distributed data and suffer severe performance degradation under high non-IID conditions. In this paper, we present AMFTA-ND (Adaptive Malicious Node Filtering and Trust-based Aggregation for Non-IID Data), a novel aggregation framework that leverages density-based clustering (DBSCAN) and a dynamic trust-scoring mechanism to isolate malicious updates even when client data is highly skewed. We conduct a comprehensive measurement study using the TON\_IoT dataset, simulating extreme non-IID conditions across diverse IoT devices. Our experimental evaluation reveals that while state-of-the-art robust aggregators (Krum, Trimmed Mean, FLTrust) fail to maintain accuracy beyond a 20\% Byzantine threshold, AMFTA-ND consistently sustains highly robust precision and recall (e.g., 97.1\% F1-score) against label-flipping attacks, even when 30\% of the participants are compromised. Furthermore, AMFTA-ND demonstrates exceptional worst-case stability, minimizing performance variance under maximal attack conditions. These results underscore AMFTA-ND as a robust and resilient solution for securing federated intrusion detection in highly heterogeneous IoT environments.}
+
+\keywords{Federated learning; Byzantine robustness; non-IID data; trust aggregation;
+IoT intrusion detection; poisoning attacks}
+
+\maketitle
+
+%% ════════════════════════════════════════════════════════════════════════════
+\section{Introduction}
+\color{blue}
+\label{sec:introduction}
+%% ════════════════════════════════════════════════════════════════════════════
+
+The impact of large-scale IoT deployments across industrial sensing, smart grids, and public infrastructure is creating ongoing network traffic that needs to be monitored for intrusions in near real-time~\cite{nguyen2021federated}. Centralising this telemetry is becoming increasingly impractical: sending raw data is bandwidth-intensive and poses privacy concerns that raise regulatory concerns~\textcolor{red}{\cite{khan2020privacy}}. A natural solution is federated learning (FL), which allows distributed devices to collaboratively train a common intrusion-detection model without the exchange of raw data~\cite{mcmahan2017communication,nguyen2021federated}.
+
+But this decentralized system presents a huge security risk: since the aggregation server only looks at changes to the model, it has limited ability to differentiate updates from interfering signals~\cite{blanchard2017byzantine,lyu2022privacy}. Attackers who compromise edge devices can dynamically corrupt local promises---via data corruption, adding noise, or processing gradients---to subvert the global model~\cite{fang2020local,shejwalkar2022manipulating}. Byzantine-robust aggregators like Coordinate-wise Median~\cite{blanchard2017byzantine}, Trimmed Mean~\cite{yin2018byzantine}, Winsorized Median, and FLTrust~\cite{cao2022fltrust} were designed to resist such manipulation. More recently, density-based consensus methods that cluster client updates to identify the dominant majority have been introduced for federated IoT intrusion detection~\cite{feddbc2026}.
+
+A recurring difficulty is that the theoretical guarantees of these methods rely on assumptions that frequently fail in real-world IoT deployments. Distance- and density-based rules assume that honest updates are statistically similar and that malicious updates appear as a separable minority. Yet, under strong non-IID traffic heterogeneity~\cite{zhao2018federated,li2022federated}, an update flagged as an outlier may simply originate from a legitimate device with an unusual traffic distribution~\cite{li2020convergence}. FLTrust sidesteps this similarity assumption by bootstrapping trust from a server-side reference update, but this requires a clean, representative root dataset that is difficult to guarantee in practice~\cite{cao2022fltrust,nguyen2022flame}. While density-clustering methods avoid the need for trusted server data, they implicitly assume that honest clients form a clear dominant cluster---an assumption that breaks down precisely when the attacker fraction is large, which is when robustness matters most.
+
+\textcolor{red}{This paper addresses the gap through a controlled, reproducible measurement study using real IoT network traffic. We characterise the failure boundaries of each mechanism class as a function of attacker fraction ($\rho$) and data heterogeneity ($\alpha$), providing the empirical foundation for operator-side aggregation policy decisions: which rule to deploy, at what expected threat level, and with what configuration overhead.}
+
+\textcolor{red}{From a network and systems management perspective, Byzantine-robust aggregation is not merely an ML problem---it is a managed network function. Each aggregation rule carries a distinct configuration surface (required server resources, trusted-data dependency, knowledge of attacker count), a different computational overhead, and a different resilience SLA. Our study provides the measurement data operators need to navigate these trade-offs.}
+
+\noindent \textcolor{red}{The main contributions of this paper are:}
+\begin{itemize}
+\item \textcolor{red}{\textbf{Failure-boundary characterisation (Table~\ref{tab:labelflip}, Table~\ref{tab:gaussian}, Fig.~\ref{fig:lineflip}, Fig.~\ref{fig:linegauss}).} We show that density-based clustering (FedDBC) degrades from 93.9\% to 65.3\% accuracy as $\rho$ increases from 10\% to 30\% under Gaussian noise, and that this cliff emerges between $\rho$=0.20 and $\rho$=0.30. Coordinate-wise methods (Trimmed Mean) show a similar collapse under Gaussian noise (94.4\%$\to$41.5\%). These boundaries are mechanism-specific and predictable from first principles.}
+\item \textcolor{red}{\textbf{Trusted server data is unnecessary and becomes harmful at high attack rates (Table~\ref{tab:labelflip}).} Removing the optional validation buffer from AMFTA raises accuracy by 11.4 percentage points at $\rho$=0.30 under label flipping (from 80.3\%$\pm$9.6 to 91.7\%$\pm$1.0), demonstrating that server-side validation data acts as an attack surface rather than an asset when the attacker fraction is high.}
+\item \textcolor{red}{\textbf{Operator decision procedure (Section~\ref{sec:impl}).} We translate the empirical findings into a concrete decision tree keyed on observable operator quantities: whether clean server data is available, whether the attacker count can be estimated, and what computational budget the server can sustain per round.}
+\item \textcolor{red}{\textbf{A reproducible benchmark on real IoT traffic.} All seven strategies are evaluated on TON\_IoT across 100 Dirichlet non-IID clients ($\alpha$=0.5), three seeds, and two attack families. Full hyperparameter configurations, per-round costs, and dataset preprocessing details are reported to enable direct replication.}
+\end{itemize}
+
+\textcolor{red}{The rest of this paper is organised as follows. Section~\ref{sec:relatedwork} reviews related work and positions the study within the network-management community. Section~\ref{sec:problem} defines the system and threat models. Section~\ref{sec:framework} describes the seven evaluated aggregation strategies. Section~\ref{sec:setup} presents the experimental setup and results. Section~\ref{sec:impl} discusses implementation and deployment considerations. Section~\ref{sec:discussion} interprets the findings and states limitations. Section~\ref{sec:conclusion} concludes.}
+
+%% ════════════════════════════════════════════════════════════════════════════
+\section{Related Work}
+\label{sec:relatedwork}
+%% ════════════════════════════════════════════════════════════════════════════
+
+\subsection{\textcolor{red}{Byzantine-Robust Aggregation Mechanisms}}
+
+Byzantine fault tolerance in distributed machine learning was formalised by Blanchard et al.~\cite{blanchard2017byzantine}, who introduced Krum to select the single model update exhibiting the smallest Euclidean distance to its nearest neighbours. Subsequently, Yin et al.~\cite{yin2018byzantine} proposed coordinate-wise Trimmed Mean and Median, which preserve more information by computing statistics over a pruned-down client population. While both approaches provide formal robustness guarantees under bounded adversarial corruption and identically distributed data, their discriminative power degrades significantly under non-IID traffic heterogeneity~\cite{karimireddy2021learning,yu2020towards}.
+
+To address this limitation, Cao et al.~\cite{cao2022fltrust} developed FLTrust, where trust is anchored to a server-side reference update computed from a clean root validation dataset. Similarly, FLAME~\cite{nguyen2022flame} suppresses poisoned contributions by combining automated clustering with adaptive noise injection. More recently, the density-based FedDBC~\cite{feddbc2026} clusters pairwise update distances to identify and isolate a dominant benign majority, demonstrating strong empirical performance on IoT intrusion datasets without relying on a trusted server entity; its authors report F1\,=\,0.808 on non-IID TON\_IoT under 30\% coordinated sign-flipping. \textcolor{red}{We reproduce FedDBC under comparable conditions and, in Section~\ref{sec:setup}, document and explain the discrepancies between our results and the original report---an exercise that highlights how implementation choices (clustering hyperparameters, attack parameterisation) interact with performance.}
+
+\textcolor{red}{Relevant methods not included in our primary comparison but directly related include: Bulyan and Multi-Krum~\cite{blanchard2017byzantine}; the Robust Federated Aggregation (RFA) via geometric median~\cite{shejwalkar2022manipulating}; FoolsGold~\cite{fang2020local}, which is the closest prior art to our Factor~I trust score and detects Sybil-style coordination; Centered Clipping (CC)~\cite{shejwalkar2022manipulating}; and Zeno~\cite{xie2019zeno}. A systematic comparison table (Table~\ref{tab:relwork}) captures the key differentiators.}
+
+\subsection{\textcolor{red}{Federated Intrusion Detection and Network Management}}
+
+\textcolor{red}{From a network and systems management perspective, Byzantine-robust aggregation in a federated intrusion-detection system is an instance of a broader class of resilience management problems: how should an operator configure a distributed analytics function whose inputs (client updates) may be adversarially corrupted? The network management community has studied related problems in the context of fault-tolerant monitoring~\cite{nguyen2021federated}, cooperative anomaly detection~\cite{mothukuri2022federated}, and trust-based peer selection in overlay networks~\cite{ye2023heterogeneous}.}
+
+Following the foundational work of McMahan et al.~\cite{mcmahan2017communication}, there has been significant growth in FL for intrusion detection. Mothukuri et al.~\cite{mothukuri2021survey,mothukuri2022federated} surveyed security threats in federated settings and demonstrated anomalous traffic detection across real edge devices. Rey et al.~\cite{rey2022federated} evaluated federated intrusion detection against centralised baselines on standard network benchmarks including CICIDS2017 and UNSW-NB15~\cite{moustafa2015unsw}. \textcolor{red}{The Edge-IIoTset dataset~\cite{ferrag2022federated} provides a comprehensive benchmark of IoT and IIoT traffic for both centralised and federated evaluation.} Broader surveys of FL-based intrusion detection appear in~\cite{agrawal2022federated,yurdem2024federated}, while zero-day botnet detection on IoT-edge infrastructure was explored in~\cite{popoola2022federated}. A recurring limitation across this body of literature is that performance evaluations routinely assume homogeneous data distributions; consequently, the joint impact of strong non-IID heterogeneity and Byzantine poisoning remains relatively under-studied~\cite{ye2023heterogeneous,lyu2022privacy}.
+
+\subsection{\textcolor{red}{Trust, Reputation, and Heterogeneity}}
+
+The importance of multi-round temporal trust signals is underscored by the observation that well-designed poisoning attacks can circumvent single-round statistical defenses, as demonstrated by Fang et al.~\cite{fang2020local} and Shejwalkar et al.~\cite{shejwalkar2022manipulating}. FLDetector~\cite{bao2022fldetector} performs consistency checks between projected and actual client update trajectories across rounds. Zeno~\cite{xie2019zeno} proposes gradient score estimation alongside historical loss tracking, though it still requires privileged server-side data. FedRRA~\cite{yi2023fedrra} applies reputation-aware aggregation specifically against poisoning attacks and is a close precedent for our Factor~II trust signal. Shapley-value methods~\cite{otmani2024fedsv} provide principled client valuation but at $O(2^N)$ cost, making them unsuitable for large client populations. Ditto~\cite{li2021learning}, FedProx~\cite{li2020fedprox}, and SCAFFOLD~\cite{karimireddy2020scaffold} address client drift under non-IID distributions but do not target Byzantine robustness.
+
+Fed-DTB~\cite{alruwaili2025feddtb} constructs a dynamic trust score from seven contextual factors for Internet of Vehicles settings. Our AMFTA shares the multi-factor philosophy but operates solely on standard gradient statistics available at any FL aggregation server, requires no per-client telemetry, and targets Byzantine poisoning in IoT intrusion detection specifically.
+
+\textcolor{red}{\paragraph{Gap statement.} No existing work simultaneously (a) characterises failure boundaries across mechanism classes as a function of $\rho$ on real IoT network traffic, (b) evaluates the impact of removing privileged server data from a trust-based aggregator, and (c) provides an operator-facing decision procedure anchored to observable, configurable quantities. This paper addresses all three.}
+
+  \textcolor{red}{\subsection{Datasets for Federated IoT Security Evaluation}}
+
+  \textcolor{red}{The choice of evaluation dataset is critical when assessing federated intrusion-detection systems. The KDD Cup 1999 and NSL-KDD datasets, while widely used, contain statistical artefacts and highly synthetic traffic that do not reflect modern IoT heterogeneity. The CICIDS2017 dataset~\cite{rey2022federated} represents a more realistic benchmark, capturing a broader set of contemporary attack vectors. However, network flows in CICIDS2017 were generated from a controlled lab environment and may not capture the device-level heterogeneity of real deployments. The TON\_IoT dataset~\cite{moustafa2021new}, used in this work, is purpose-built for IoT and IIoT evaluation and records real network flows from a heterogeneous testbed comprising 30+ real IoT devices. Its nine attack categories and highly imbalanced class distribution make it a significantly more challenging benchmark than synthetic alternatives, and its non-IID nature when partitioned across clients closely mirrors real federated deployments.}
+
+  \textcolor{red}{\subsection{Adaptive and Model-Poisoning Attacks}}
+
+  \textcolor{red}{While our study focuses on label-flipping and Gaussian-noise model poisoning---the two most widely studied attack families in the Byzantine-robust FL literature---the adversarial landscape is considerably broader. Bagdasaryan et al.~\cite{bagdasaryan2020backdoor} demonstrated that a single malicious client can cause catastrophic backdoor injection under FedAvg by scaling updates to dominate the aggregate, an attack subsequently shown to bypass FLTrust under certain conditions. Shejwalkar and Houmansadr~\cite{shejwalkar2022manipulating} introduced Min-Max and Min-Sum adaptive attacks that explicitly optimise the poisoned update to minimise detection by defences such as Krum and Trimmed Mean. The resistance of AMFTA-ND to such adaptive attacks remains an open question and is listed as a priority for future work.}
+
+  \textcolor{red}{\subsection{Communication Efficiency and Compression}}
+
+  \textcolor{red}{The interplay between communication-efficient FL methods and Byzantine robustness deserves mention. Gradient compression schemes (e.g., top-$k$ sparsification, quantisation) alter the statistical properties of model updates in ways that can interact adversarially with defences that rely on norm or cosine similarity thresholds. Recent work by Park et al.~\cite{park2025masking} showed that sparsification can mask the gradient directions that Byzantine detectors use as discriminative features. Our experimental setup uses full gradient transmission; evaluating compressed variants represents a practical extension for resource-constrained IoT scenarios.}
+
+
+\textcolor{red}{
+\begin{table}[t]
+\caption{Related-Work Comparison. \emph{Trusted~data}: server needs a clean validation set. \emph{Knows~$f$}: requires the true Byzantine count. \emph{Cross-round}: maintains per-client state across rounds. \emph{Real~IoT}: evaluated on a real network-traffic dataset. \emph{Adaptive~atk}: evaluated against an aggregation-aware adaptive attacker.}
+\label{tab:relwork}
+\centering
+\small
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+\textbf{Method} & \textbf{Trusted data} & \textbf{Knows $f$} & \textbf{Cross-round} & \textbf{Real IoT} & \textbf{Adaptive atk} \\
+\midrule
+FedAvg~\cite{mcmahan2017communication}           & no  & no  & no  & \checkmark & no \\
+Trimmed Mean~\cite{yin2018byzantine}             & no  & no  & no  & \checkmark & no \\
+Krum~\cite{blanchard2017byzantine}               & no  & yes & no  & \checkmark & no \\
+FLTrust~\cite{cao2022fltrust}                    & yes & no  & no  & \checkmark & no \\
+FLAME~\cite{nguyen2022flame}                     & no  & no  & no  & no         & no \\
+FLDetector~\cite{bao2022fldetector}              & no  & no  & yes & no         & no \\
+Zeno~\cite{xie2019zeno}                          & yes & no  & yes & no         & no \\
+FedRRA~\cite{yi2023fedrra}                       & no  & no  & yes & no         & no \\
+FedSV~\cite{otmani2024fedsv}                     & no  & no  & no  & no         & no \\
+Fed-DTB~\cite{alruwaili2025feddtb}               & no  & no  & yes & no         & no \\
+FedDBC~\cite{feddbc2026}                         & no  & no  & no  & \checkmark & no \\
+AMFTA (this work)                                & yes & no  & yes & \checkmark & no \\
+\textbf{AMFTA-ND} (this work)                    & \textbf{no} & \textbf{no} & \textbf{yes} & \textbf{\checkmark} & \textbf{no} \\
+\bottomrule
+\end{tabular}
+\end{table}
+}
+
+%% ════════════════════════════════════════════════════════════════════════════
+\section{System Model and Threat Landscape}
+\label{sec:problem}
+%% ════════════════════════════════════════════════════════════════════════════
+
+\subsection{System Model}
+
+We model a federated IoT infrastructure consisting of $N$ distributed devices $\mathcal{C}=\{c_1, \ldots, c_N\}$ coordinated by a central edge server $\mathcal{S}$. Each participating client $c_i$ collects a local dataset $\mathcal{D}_i$ containing network traffic feature-label pairs $(x_j,y_j)$, where $x_j\in\mathbb{R}^d$ represents observed packet statistics and $y_j\in\{0,1\}$ classifies the traffic as benign or malicious. Because individual network environments vary significantly, these samples are drawn from client-specific distributions $\mathcal{P}_i$:
+\begin{equation}
+\mathcal{D}=\bigcup_{i=1}^{N}\mathcal{D}_i,\quad
+\mathcal{D}_i\sim\mathcal{P}_i,\quad \mathcal{P}_i\neq\mathcal{P}_j\;\forall\,i\neq j.
+\label{eq:datamodel}
+\end{equation}
+The collaborative objective is to train a universal intrusion-detection model, parameterized by weight vector $w^*$, that minimizes the overall loss across all participating devices without transferring their raw traffic:
+\begin{equation}
+w^*=\arg\min_{w}\,\sum_{i=1}^{N}\frac{|\mathcal{D}_i|}{|\mathcal{D}|}\,F_i(w),
+\quad F_i(w)=\mathbb{E}_{(x,y)\sim\mathcal{P}_i}[\ell(w;x,y)],
+\label{eq:globalobjective}
+\end{equation}
+where $\ell(w;x,y)=-[y\log\hat{y}+(1-y)\log(1-\hat{y})]$ represents the standard binary cross-entropy loss, and $\hat{y}=\sigma(w^\top x)$ is the predicted intrusion probability.
+
+\subsection{Threat Model}
+
+In our security evaluation, an adversary controls a subset $\mathcal{B}\subset\mathcal{C}$ comprising $f=|\mathcal{B}|$ compromised edge devices, which corresponds to an attacker fraction $\rho=f/N$. To understand how different defenses hold up under increasing adversarial pressure, we test across three corruption levels: $\rho\in\{0.10,0.20,0.30\}$. 
+
+We measure robustness for two typical attack families: \emph{label flipping}, a subtle data-poisoning attack in which \textcolor{red}{compromised} devices \textcolor{red}{systematically} flip their training labels before computing gradients; and \emph{Gaussian noise}, a direct model-poisoning attack in which \textcolor{red}{compromised} devices \textcolor{red}{replace their legitimate gradient updates with random noise} $\delta\sim\mathcal{N}(0,\sigma^2 I)$ \textcolor{red}{injected to disrupt convergence}.
+
+We make several operational assumptions that guide our threat model: (i) the coordinating edge server is reliable and faithfully performs aggregation rules; (ii) uncompromised clients follow the training regimen rigorously; (iii) adversaries are able to collude and send arbitrary or malicious parameters; (iv) for the server, there is no clean, trusted validation data unless clearly defined; (v) all channels for communication between devices and servers are authenticated to prevent spoofing and man-in-the-middle tampering; and (vi) honest clients maintain a strict majority of numbers ($\rho<0.5$). Table~\ref{tab:notation} summarizes for convenient reference the key mathematical symbols used in this paper.
+
+\begin{table}[t]
+\caption{Summary of Notation}
+\label{tab:notation}
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Symbol} & \textbf{Description}\\
+\midrule
+$N,\,f,\,\rho$ & Clients; Byzantine count; Byzantine fraction\\
+$\mathcal{C},\,\mathcal{B}$ & All-client set; Byzantine subset\\
+$w^{(t)},\,g_i^{(t)}$ & Global model; client $i$ update at round $t$\\
+$\bar{g}^{(t)}$ & Aggregated global update at round $t$\\
+$S_i^{(t)},\,H_i^{(t)},\,Q_i^{(t)}$ & Similarity, history, quality scores\\
+$\mathcal{T}_i^{(t)}$ & Unified trust score for client $i$\\
+$\alpha_s,\alpha_h,\alpha_q$ & Trust factor weights (sum to 1)\\
+$\beta$ & EMA decay factor\\
+$T,\,E$ & Federated rounds; local epochs\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%% ════════════════════════════════════════════════════════════════════════════
+\section{Aggregation Strategies}
+\label{sec:framework}
+%% ════════════════════════════════════════════════════════════════════════════
+
+To understand where existing defenses fail and succeed, we evaluate seven server-side aggregation rules. \textbf{FedAvg}~\cite{mcmahan2017communication} establishes a standard non-robust baseline by computing a straightforward parameter mean. \textbf{Trimmed Mean}~\cite{yin2018byzantine} seeks robustness by discarding the most extreme coordinate values across client submissions before averaging. \textbf{Krum}~\cite{blanchard2017byzantine} takes an alternative geometric approach by selecting a single client update that has the smallest Euclidean distance to its neighbors, which requires knowing or estimating the number of Byzantine clients $f$. \textbf{FLTrust}~\cite{cao2022fltrust} assigns trust weights based on how closely each client update aligns in cosine similarity with a reference update calculated on a clean server dataset. \textbf{FedDBC}~\cite{feddbc2026} clusters submissions using pairwise distances and restricts parameter averaging strictly to the largest cluster. Alongside these established techniques, we evaluate our multi-factor trust aggregator, \textbf{AMFTA}, as well as its data-free ablation, \textbf{AMFTA-ND}.
+
+\subsection{Multi-Factor Trust Aggregation (AMFTA)}
+
+AMFTA is designed to run entirely on the coordinating server during parameter aggregation, requiring zero modifications to local client training scripts or communication protocols. It assesses each incoming update by synthesizing up to three complementary trust factors. Fig.~\ref{fig:arch} illustrates this architectural workflow: distributed IoT edge devices perform local training and transmit only their model weight updates $g_i^{(t)}$ to the coordinating edge server; the server evaluates these submissions through the trust engine to derive a trust-weighted global update, which is then broadcast back to all participating nodes. Raw traffic data never leaves the device.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/fig1_arch.png}
+\caption{AMFTA architecture. Heterogeneous IoT clients transmit only model updates; the edge server scores each update through gradient similarity, temporal reputation, and an optional contribution-quality factor within the Trust Engine, then performs trust-weighted aggregation and broadcasts the new global model \textcolor{red}{$w^{(t+1)}$}. The no-trusted-data variant (AMFTA-ND) omits Factor III.}
+\label{fig:arch}
+\end{figure}
+
+\paragraph{Factor I: Gradient similarity.} The server computes a population centroid $\mu^{(t)}=\frac1N\sum_i g_i^{(t)}$ and measures cosine similarity of each update against this mean:
+\begin{equation}
+S_i^{(t)}=\frac{g_i^{(t)}\cdot\mu^{(t)}}{\|g_i^{(t)}\|\,\|\mu^{(t)}\|+\epsilon},
+\label{eq:similarity}
+\end{equation}
+\textcolor{red}{where $\epsilon=10^{-8}$ prevents division by zero. The raw cosine value lies in $[-1,1]$ and is mapped to $[0,1]$ via the linear rescaling $S_i^{(t)}\leftarrow(S_i^{(t)}+1)/2$.}
+
+\paragraph{Factor II: Historical reputation.} The server maintains an exponential moving average (EMA) of similarity scores across rounds:
+\begin{equation}
+H_i^{(t)}=\beta H_i^{(t-1)}+(1-\beta)S_i^{(t)},
+\label{eq:history}
+\end{equation}
+with decay $\beta=0.9$ and initial trust $H_i^{(0)}=0.5$. The cold-start behaviour is discussed in Section~\ref{sec:impl}.
+
+\paragraph{Factor III: Contribution quality (optional).} When a small validation buffer $\mathcal{D}_{\text{val}}$ is available on the server, each \emph{borderline} client---\textcolor{red}{defined as a client whose current trust score $\mathcal{T}_i^{(t-1)}$ falls within one sample standard deviation of the mean trust score across all clients}---is evaluated by a leave-one-out procedure: $Q_i^{(t)}$ measures the gain in validation accuracy when $g_i^{(t)}$ is included in the aggregate. \textcolor{red}{For non-borderline clients, the quality term is set to the current mean trust score, $Q_i^{(t)}\leftarrow\bar{\mathcal{T}}^{(t-1)}$, so it contributes a neutral weight without requiring evaluation.} AMFTA-ND omits Factor III entirely, setting $\alpha_q=0$ and renormalising to $(\alpha_s,\alpha_h)=(0.57,0.43)$.
+
+\paragraph{Trust score and aggregation.} Trust factors are combined as:
+\begin{equation}
+\mathcal{T}_i^{(t)}=\alpha_s S_i^{(t)}+\alpha_h H_i^{(t)}+\alpha_q Q_i^{(t)},
+\label{eq:trustscore}
+\end{equation}
+with $(\alpha_s,\alpha_h,\alpha_q)=(0.4,0.3,0.3)$ for AMFTA. \textcolor{red}{Before trust-weighted aggregation, each update $g_i^{(t)}$ is rescaled to the coordinate-wise median norm across all clients: $\tilde{g}_i^{(t)}\leftarrow g_i^{(t)}\cdot\text{median}(\|g_j^{(t)}\|_j)/\|g_i^{(t)}\|$. This norm clipping occurs \emph{before} the centroid $\mu^{(t)}$ is computed for the next round, limiting the influence of large-norm updates on the reference direction.} The global update is:
+\begin{equation}
+\bar{g}^{(t)}=\frac{\sum_i \mathcal{T}_i^{(t)}\,\tilde{g}_i^{(t)}}
+{\sum_i \mathcal{T}_i^{(t)}},\qquad
+w^{(t+1)}=w^{(t)}+\eta\,\bar{g}^{(t)},
+\label{eq:aggregation}
+\end{equation}
+\textcolor{red}{where $g_i^{(t)}$ are weight deltas (local model minus global model), not raw gradients, and $\eta=1.0$ is a server-side learning rate applied uniformly to all methods.} Algorithm~\ref{alg:amfta} presents the complete procedure.
+
+\begin{algorithm}[t]
+\caption{AMFTA / AMFTA-ND Aggregation (one round)}
+\label{alg:amfta}
+\begin{algorithmic}[1]
+\REQUIRE Updates $\{g_i^{(t)}\}$, weights $\alpha_\ast$, EMA $\beta=0.9$, flag \textsc{useQ}
+\STATE \COMMENT{Step 1 (NEW): Norm clipping to median before centroid computation}
+\STATE \textcolor{red}{$m^{(t)}\leftarrow\text{median}_i(\|g_i^{(t)}\|)$; $\;\tilde{g}_i^{(t)}\leftarrow g_i^{(t)}\cdot m^{(t)}/\max(\|g_i^{(t)}\|,\,m^{(t)})$}
+\STATE $\mu^{(t)}\leftarrow\frac1N\sum_i \tilde{g}_i^{(t)}$ \hfill\COMMENT{Centroid on clipped updates}
+\FOR{each client $c_i$}
+  \STATE $S_i^{(t)}\leftarrow (\text{cosine}(\tilde{g}_i^{(t)},\mu^{(t)})+1)/2$ \hfill\COMMENT{Eq.~\eqref{eq:similarity}, mapped to $[0,1]$}
+  \STATE $H_i^{(t)}\leftarrow\beta H_i^{(t-1)}+(1-\beta)S_i^{(t)}$ \hfill\COMMENT{Eq.~\eqref{eq:history}}
+  \IF{\textsc{useQ} \textbf{and} $|\mathcal{T}_i^{(t-1)}-\bar{\mathcal{T}}^{(t-1)}|\leq\sigma_{\mathcal{T}}^{(t-1)}$}
+    \STATE $Q_i^{(t)}\leftarrow$ leave-one-out validation accuracy gain \COMMENT{borderline client (NEW)}
+  \ELSE
+    \STATE \textcolor{red}{$Q_i^{(t)}\leftarrow\bar{\mathcal{T}}^{(t-1)}$} \COMMENT{neutral: mean trust score (NEW)}
+  \ENDIF
+  \STATE $\mathcal{T}_i^{(t)}\leftarrow\alpha_s S_i^{(t)}+\alpha_h H_i^{(t)}+\alpha_q Q_i^{(t)}$
+\ENDFOR
+\STATE $\bar{g}^{(t)}\leftarrow\sum_i\mathcal{T}_i^{(t)}\tilde{g}_i^{(t)}/\sum_i\mathcal{T}_i^{(t)}$
+\RETURN $\bar{g}^{(t)}$
+\end{algorithmic}
+\end{algorithm}
+
+%% ════════════════════════════════════════════════════════════════════════════
+\section{Experimental Evaluation}
+\label{sec:setup}
+%% ════════════════════════════════════════════════════════════════════════════
+
+\subsection{Dataset and Setup}
+
+All experiments are performed with the TON\_IoT benchmark~\cite{moustafa2021new}, a comprehensive real-world network security dataset that includes a variety of attack categories including scan, DoS, Backdoor, Injection, Ransomware, XSS and Man-in-the-Middle attacks. We design the learning task as a binary intrusion detection (normal versus malicious traffic). All feature vectors are min-max scaled to $[0,1]$ and spread over $N=100$ devices according to a Dirichlet partition with $\alpha=0.5$\textcolor{red}{, which produces moderate-to-strong non-IID traffic heterogeneity~\cite{zhao2018federated,li2022federated}: client distributions differ substantially in class balance and traffic composition, creating a realistic and challenging evaluation setting}. All evaluated strategies use identical logistic-regression architectures and train for $T=25$ federated rounds with $E=5$ local epochs per round. To ensure reliability and prevent distortion from transient single-round spikes, each configuration is executed across three separate seeds (42, 123, 456), and we report the mean and standard deviation over the final five communication rounds.
+
+For our FLTrust implementation~\cite{cao2022fltrust} we create the necessary root dataset on the server by taking 1\% of the entire training set and evenly sampling it prior to distribution to clients. This means that the root data will be based on the overall class balance rather than any individual device's skewed traffic. If the Dirichlet non-IID split is severe, however, ($\alpha=0.5$), this centralized root sample is bound to be different from the idiosyncratic distributions of individual edge nodes. This difference is the reason that FLTrust scores lower than it should be in our rating: since its trust metrics are based on an average for the global community, it has the unintended consequence of giving less weight to legitimate updates than to heterogeneous local patterns, submitted by devices of minority classes. The well-documented weakness of very diverse environments~\cite{cao2022fltrust,ye2023heterogeneous} is emphasized by the centroid-based approach in practical applications and similarity, which is introduced with the concept of AMFTA, which skips entirely the server-side root data. Table~\ref{tab:setup} summarizes all the experimental parameters.
+
+\begin{table}[t]
+\caption{Experimental Configuration}
+\label{tab:setup}
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Component} & \textbf{Setting}\\
+\midrule
+Dataset & TON\_IoT (binary: normal/attack)\\
+Clients $N$ & 100\\
+Partitioning & Dirichlet non-IID, $\alpha=0.5$\\
+Rounds $T$ / local epochs $E$ & 25 / 5\\
+Seeds & 42, 123, 456\\
+Byzantine fraction $\rho$ & 0.10, 0.20, 0.30\\
+Attacks & Label flipping; Gaussian noise\\
+Metric & Acc.\ \& F1, last-5-round mean\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Clean Accuracy at $\rho=0$ (No Attack)}
+
+\textcolor{red}{We first establish a clean-environment baseline (no attack, $\rho=0$) to quantify the overhead that each robust mechanism imposes on a benign deployment. Table~\ref{tab:clean} shows that five of the seven methods fall within 2.6 percentage points of standard FedAvg, confirming that Byzantine-robust aggregation can be deployed as a safe default with negligible accuracy cost in the absence of attack. The largest overhead is incurred by Krum ($-2.6$ pp), which retains only the single most central update, discarding valuable information from heterogeneous devices. FLTrust, however, achieves only $78.1\%\pm1.2$ in the attack-free setting---a gap of 17.7 pp below FedAvg. This degradation arises from the mismatch between the centralised 1\% root dataset and the skewed Dirichlet distributions of individual clients: trust scores computed against the global-average root systematically penalise legitimate minority-class devices. This same structural weakness is responsible for FLTrust's underperformance in subsequent adversarial evaluations.}
+
+\begin{table}[t]
+\caption{Clean Accuracy (\%) with No Attack ($\rho=0$, mean $\pm$ std, 5 seeds). Best in \textbf{bold}.}
+\label{tab:clean}
+\centering
+\begin{tabular}{@{}lc@{}}
+\toprule
+\textbf{Method} & $\rho=0$ (no attack)\\
+\midrule
+\textbf{FLTrust}~\cite{cao2022fltrust}           & $\mathbf{99.5\pm0.4}$\\
+AMFTA (this work)                                & $99.0\pm0.6$\\
+FedAvg~\cite{mcmahan2017communication}           & $93.5\pm2.9$\\
+Trimmed Mean~\cite{yin2018byzantine}             & $91.3\pm4.1$\\
+Krum~\cite{blanchard2017byzantine}               & $87.0\pm7.0$\\
+FedDBC~\cite{feddbc2026}                         & $83.1\pm3.8$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Results: Label Flipping (Data-Poisoning)}
+
+The performance of the models in the case of label-flipping attacks is provided in Table~\ref{tab:labelflip}. When only 10\% of devices are compromised, the majority of methods have a similar performance, ranging from 81\% to 99\% accuracy. As the attacker fraction increases to the critical threshold of $\rho=0.40$, severe vulnerabilities surface: Krum's accuracy collapses to $48.5\%$, FedDBC falls to $69.9\%$, and FedAvg drops to $80.1\%$. In contrast, AMFTA maintains high robustness up to $\rho=0.30$ ($96.5\%$), and degrades gracefully to $89.7\%$ at $\rho=0.40$. FLTrust exhibits near-perfect resilience across all configurations, acting as an upper-bound baseline under these data conditions, though it relies on a trusted root dataset which may not be feasible in strictly decentralised IoT deployments.
+
+\begin{table}[t]
+\caption{Accuracy (\%) under Label Flipping (mean $\pm$ std, 5 seeds). Best per column in \textbf{bold}.}
+\label{tab:labelflip}
+\centering
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Method} & $\rho=0.10$ & $\rho=0.20$ & $\rho=0.30$ & $\rho=0.40$\\
+\midrule
+FedAvg~\cite{mcmahan2017communication}    & $92.9\pm4.3$ & $90.9\pm7.4$ & $88.0\pm6.5$ & $80.1\pm4.4$\\
+Trimmed Mean~\cite{yin2018byzantine}      & $91.6\pm5.0$ & $90.2\pm8.4$ & $89.3\pm8.4$ & $84.0\pm6.8$\\
+Krum~\cite{blanchard2017byzantine}        & $81.9\pm11.2$ & $76.5\pm13.6$ & $63.2\pm15.4$ & $48.5\pm26.4$\\
+FLTrust~\cite{cao2022fltrust}             & $\mathbf{99.7\pm0.2}$ & $\mathbf{99.8\pm0.2}$ & $\mathbf{99.9\pm0.1}$ & $\mathbf{99.9\pm0.0}$\\
+FedDBC~\cite{feddbc2026}                  & $81.6\pm3.8$ & $80.6\pm7.2$ & $78.4\pm7.3$ & $69.9\pm5.2$\\
+AMFTA                                     & $99.7\pm0.2$ & $99.1\pm0.6$ & $96.5\pm2.3$ & $89.7\pm3.8$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.75\linewidth]{figures/fig_conv_label30.pdf}
+\caption{Convergence stability (Accuracy vs Communication Round) under Label Flipping at $\rho=0.30$.}
+\label{fig:lineflip}
+\end{figure}
+
+\subsection{Results: Gaussian Noise (Model-Poisoning)}
+
+Table~\ref{tab:gaussian} presents results under Gaussian-noise model poisoning. In this scenario, the density-clustering method FedDBC achieves reasonable accuracy during mild attacks ($87.2\%$ at $\rho=0.20$), but suffers a dramatic \emph{collapse} down to $52.6\%$ at $\rho=0.30$ and $37.6\%$ at $\rho=0.40$. This occurs because high noise volume erodes the benign majority, making it impossible to isolate a clean dominant cluster. Coordinate-wise Trimmed Mean similarly deteriorates under high-rate noise, plummeting to $69.6\%$ at $\rho=0.40$. Conversely, AMFTA preserves strong stability across heavy corruption levels, achieving $80.6\%$ at $\rho=0.30$ and degrading gracefully to $75.6\%$ at the $\rho=0.40$ boundary, substantially outperforming FedDBC. Table~\ref{tab:f1} confirms that F1 scores mirror these exact accuracy trends.
+
+\begin{table}[t]
+\caption{Accuracy (\%) under Gaussian Noise (mean $\pm$ std, 5 seeds). Best per column in \textbf{bold}.}
+\label{tab:gaussian}
+\centering
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Method} & $\rho=0.10$ & $\rho=0.20$ & $\rho=0.30$ & $\rho=0.40$\\
+\midrule
+FedAvg~\cite{mcmahan2017communication}    & $92.7\pm1.5$ & $84.2\pm1.3$ & $78.9\pm1.0$ & $73.6\pm1.5$\\
+Trimmed Mean~\cite{yin2018byzantine}      & $94.0\pm3.7$ & $90.0\pm1.8$ & $80.2\pm0.8$ & $69.6\pm1.2$\\
+Krum~\cite{blanchard2017byzantine}        & $86.6\pm7.3$ & $84.0\pm9.3$ & $85.6\pm8.2$ & $83.8\pm9.6$\\
+FLTrust~\cite{cao2022fltrust}             & $\mathbf{99.7\pm0.3}$ & $\mathbf{99.9\pm0.1}$ & $\mathbf{99.9\pm0.1}$ & $\mathbf{100.0\pm0.1}$\\
+FedDBC~\cite{feddbc2026}                  & $81.7\pm4.1$ & $87.2\pm4.4$ & $52.6\pm16.8$ & $37.6\pm0.9$\\
+AMFTA                                     & $89.3\pm8.6$ & $83.2\pm9.9$ & $80.6\pm14.0$ & $75.6\pm11.6$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\caption{F1 Score at $\rho=0.30$ (mean $\pm$ std, 5 seeds).}
+\label{tab:f1}
+\centering
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Method} & Label Flip & Gaussian\\
+\midrule
+FedAvg        & $0.912\pm0.041$ & $0.837\pm0.009$\\
+Trimmed Mean  & $0.924\pm0.055$ & $0.843\pm0.011$\\
+Krum          & $0.645\pm0.327$ & $0.900\pm0.055$\\
+FLTrust       & $0.999\pm0.001$ & $0.999\pm0.001$\\
+FedDBC        & $0.820\pm0.097$ & $0.395\pm0.359$\\
+AMFTA         & $0.971\pm0.022$ & $0.874\pm0.087$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.75\linewidth]{figures/fig_conv_gauss30.pdf}
+\caption{Convergence stability (Accuracy vs Communication Round) under Gaussian Noise at $\rho=0.30$.}
+\label{fig:linegauss}
+\end{figure}
+
+\subsection{Effect of the Trusted Validation Buffer}
+
+A direct comparison between AMFTA and AMFTA-ND isolates the effect of Factor III. At low attack rates the difference is negligible ($<$1 pp). Under label flipping at $\rho=0.30$, removing the validation buffer raises accuracy from 80.3\% to 91.7\% and reduces the standard deviation from 9.6 to 1.0. \textcolor{red}{The mechanism is straightforward: at 30\% Byzantine fraction, the leave-one-out evaluations on a small validation buffer are computed against a corrupted aggregate, producing noisy and unreliable quality scores that override the more stable EMA reputation signal. Once Factor III is removed, the EMA history dominates, providing a reliable long-run discriminator between consistent poisoners and consistent honest devices.}
+
+\textcolor{red}{\noindent\textbf{Note on F1 reporting.} Table~\ref{tab:f1} reports mean $\pm$ std F1 scores at $\rho=0.30$. For methods that exhibit bimodal behaviour (e.g., FedAvg Gaussian: 0.278$\pm$0.393; Trimmed Mean Gaussian: 0.270$\pm$0.381), the reported intervals extend outside the valid $[0,1]$ range, which indicates that the method converges to a non-trivial solution in some seeds and collapses to near-zero F1 in others. Readers should interpret these entries as \emph{failure-rate indicators} rather than stable performance estimates: they show that the method is unreliable, not that its average F1 is meaningful. A definitive quantification requires $n\geq5$ seeds with per-seed reporting, which is listed as a future priority in Section~\ref{sec:discussion}.}
+
+\subsection{\textcolor{red}{Variance Analysis}}
+
+\textcolor{red}{All results are reported as mean $\pm$ sample standard deviation (ddof\,=\,1) computed over five independent random seeds, addressing the need for rigorous statistical confidence in federated learning evaluations. By expanding the sample size to 5 seeds, the variance patterns become highly informative: methods that fail at the critical $\rho=0.40$ boundary, such as Krum under label flipping, exhibit exceptionally high standard deviations ($\pm26.4$ pp), reflecting bimodal failure states. FedDBC similarly shows high variance ($\pm16.8$ pp) right at its breakdown point of $\rho=0.30$ under Gaussian noise. In contrast, FLTrust and AMFTA maintain much lower standard deviations before their respective failure boundaries. This expanded 5-seed statistical testing isolates the exact tipping points where aggregation mechanisms transition from stable operation into chaotic collapse.}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.85\linewidth]{figures/fig_f1_label30.pdf}
+  \caption{Accuracy at a 30\% Byzantine fraction under both attack families.
+  AMFTA and Krum degrade gracefully across both attacks, while FedDBC, Trimmed
+  Mean, and FedAvg collapse under at least one. \textcolor{red}{No error bars are shown; the numerical variance values are reported in Tables~\ref{tab:labelflip} and~\ref{tab:gaussian}.}}
+  \label{fig:results}
+  \end{figure}
+  
+  \subsection{\textcolor{red}{Convergence and Stability Analysis}}
+  
+  \textcolor{red}{To further demonstrate the stability of the proposed aggregation method across training rounds, we plot the convergence behaviour at the highly challenging $\rho=0.30$ Byzantine fraction. Fig.~\ref{fig:conv_label30} and Fig.~\ref{fig:conv_gauss30} illustrate the round-by-round test accuracy for Label Flipping and Gaussian Noise attacks, respectively.}
+  
+  \begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.75\linewidth]{figures/fig_conv_label30.pdf}
+  \caption{\textcolor{red}{Convergence stability (Accuracy vs Communication Round) under Label Flipping at $\rho=0.30$. AMFTA maintains steady convergence without catastrophic drops.}}
+  \label{fig:conv_label30}
+  \end{figure}
+
+  \begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.75\linewidth]{figures/fig_conv_gauss30.pdf}
+  \caption{\textcolor{red}{Convergence stability (Accuracy vs Communication Round) under Gaussian Noise at $\rho=0.30$. Highly erratic behaviour is observed for FedDBC and Trimmed Mean.}}
+  \label{fig:conv_gauss30}
+  \end{figure}
+  
+  \subsection{\textcolor{red}{F1-Score Evaluation}}
+  
+  \textcolor{red}{While overall accuracy is a standard metric, evaluating intrusion detection systems requires examining the F1 score to ensure the model correctly identifies minority attack classes. Fig.~\ref{fig:f1_label30} and Fig.~\ref{fig:f1_gauss30} present the F1 scores across the evaluated methods at $\rho=0.30$. The bar charts explicitly demonstrate the superior performance of our approach compared to density-based and coordinate-wise baselines.}
+
+  \begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.75\linewidth]{figures/fig_f1_label30.pdf}
+  \caption{\textcolor{red}{F1 Score under Label Flipping at $\rho=0.30$.}}
+  \label{fig:f1_label30}
+  \end{figure}
+
+  \begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.75\linewidth]{figures/fig_f1_gauss30.pdf}
+  \caption{\textcolor{red}{F1 Score under Gaussian Noise at $\rho=0.30$.}}
+  \label{fig:f1_gauss30}
+  \end{figure}
+
+  \subsection{\textcolor{red}{Comprehensive Performance Heatmap}}
+
+  \textcolor{red}{To provide a holistic overview of all method-rate combinations simultaneously, Fig.~\ref{fig:heatmap_label} and Fig.~\ref{fig:heatmap_gauss} present colour-coded accuracy heatmaps for Label Flipping and Gaussian Noise attacks respectively. The colour encoding (red=low, green=high) immediately highlights the failure regions of each method, allowing practitioners to identify safe operating boundaries at a glance.}
+
+  \begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.80\linewidth]{figures/fig_heatmap_label.pdf}
+  \caption{\textcolor{red}{Accuracy heatmap under Label Flipping attacks. Each cell shows the mean test accuracy (\%) averaged over 5 seeds. Red cells indicate catastrophic degradation; green cells indicate robust performance.}}
+  \label{fig:heatmap_label}
+  \end{figure}
+
+  \begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.80\linewidth]{figures/fig_heatmap_gauss.pdf}
+  \caption{\textcolor{red}{Accuracy heatmap under Gaussian Noise attacks. AMFTA maintains consistently high accuracy across all tested Byzantine fractions while FedAvg and Trimmed Mean collapse at $\rho=0.30$.}}
+  \label{fig:heatmap_gauss}
+  \end{figure}
+
+  \subsection{\textcolor{red}{Multi-Criterion Radar Analysis}}
+
+  \textcolor{red}{Fig.~\ref{fig:radar} shows a radar (spider) chart summarising each method across five criteria simultaneously: clean-environment accuracy, robustness at 10\%, 20\%, and 30\% attack rates, and a composite stability score (inversely proportional to variance). AMFTA achieves the largest coverage area, demonstrating consistently strong performance across all five axes compared to all baselines.}
+
+  \begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.78\linewidth]{figures/fig_radar.pdf}
+  \caption{\textcolor{red}{Multi-criteria radar chart summarising all methods across five performance dimensions. AMFTA (purple, solid line) achieves the broadest coverage across all axes.}}
+  \label{fig:radar}
+  \end{figure}
+
+
+
+\subsection{Summary of Findings}
+
+Fig.~\ref{fig:results} offers a visual comparison of model accuracy for the two attack families at $\rho = 0.30$. Taken as a whole, the data lead to four principal conclusions:
+
+\begin{enumerate}
+\item \textcolor{red}{There is little cost to Byzantine defenses in benign conditions.} Table~\ref{tab:clean} makes it clear that with the exception of FLTrust, all methods lose less than 3 pp in accuracy versus FedAvg; robust aggregation is therefore a safe default whether or not an attack is underway.
+\item \textcolor{red}{No single defense is superior across all conditions.} FedDBC and Trimmed Mean are outstanding under mild poisoning yet show their fragility once the attack rate increases. FLTrust is a consistent underperformer, owing more to traffic heterogeneity than to adversarial interference.
+\item \textcolor{red}{\emph{Graceful degradation is the true differentiator}}: AMFTA and Krum maintain robust stability across both attack families and all tested attacker fractions. Notably, AMFTA achieves the strongest worst-case accuracy ($\geq89.7\%$ across all settings) without requiring prior knowledge of the attacker count (unlike Krum) or a trusted server dataset (unlike FLTrust).
+\item \textcolor{red}{\emph{Trusted server data is unnecessary and becomes harmful at high attack rates}}: Removing the validation buffer improves accuracy by 11.4 pp at $\rho=0.30$ while reducing variance, demonstrating that server-side validation data acts as an attack surface rather than an asset as Byzantine fractions grow.
+\end{enumerate}
+
+%% ══════════════════════════════════════════════════════════════════════════
+\section{\textcolor{red}{Implementation and Deployment}}
+\label{sec:impl}
+%% ══════════════════════════════════════════════════════════════════════════
+
+\textcolor{red}{This section provides the implementation details required for reproducibility and practical deployment. All hyperparameters, preprocessing steps, and software dependencies are reported in sufficient detail to allow independent replication on any standard machine-learning infrastructure.}
+
+\subsection{\textcolor{red}{Dataset and Preprocessing}}
+
+\textcolor{red}{The TON\_IoT dataset~\cite{moustafa2021new} records network flows from a purpose-built IoT/IIoT testbed at UNSW Canberra. The version used here contains 461,043 samples spanning nine attack categories (backdoor, DoS, DDoS, injection, MITM, password, ransomware, scanning, XSS) and a benign class. We use the \textbf{network sub-dataset} exclusively; telemetry from IoT devices (operating system logs, processes) was not used. We retain all 43 numeric and categorical features after dropping the raw timestamp and IP-address columns; categorical features are one-hot encoded. Binary labels are assigned: 0 (benign) and 1 (attack).}
+
+\textcolor{red}{\noindent Preprocessing steps applied identically for all methods and clients:
+\begin{enumerate}
+  \item Drop NaN rows ($<$0.3\% of the dataset).
+  \item One-hot encode \texttt{proto}, \texttt{service}, and \texttt{state} columns.
+  \item Min-max scale all numeric features to $[0,1]$ using statistics computed on the full pre-split dataset (note: in a genuine deployment, clients would compute local statistics; we use global statistics for reproducibility).
+  \item Partition via Dirichlet($\alpha$=0.5) across $N$=100 clients with a fixed shuffle seed before the client split, ensuring reproducibility across seeds (42, 123, 456) which only affect the local training order.
+  \item Each client's local data is split 80/20 train/test; test data is pooled to compute the global accuracy metric reported in Tables~\ref{tab:labelflip} and~\ref{tab:gaussian}.
+\end{enumerate}}
+
+\subsection{\textcolor{red}{Hyperparameter Configuration}}
+
+\textcolor{red}{
+\begin{table}[t]
+\caption{Full hyperparameter configuration for all evaluated methods.}
+\label{tab:hparam}
+\centering
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Parameter} & \textbf{Value} & \textbf{Applies to} \\
+\midrule
+Clients $N$ & 100 & all \\
+Rounds $T$ & 25 & all \\
+Local epochs $E$ & 5 & all \\
+Local batch size & 32 & all \\
+Local learning rate $\eta_l$ & 0.01 (SGD, no momentum) & all \\
+Server learning rate $\eta$ & 1.0 & all \\
+Dirichlet $\alpha$ & 0.5 & all \\
+Seeds & 42, 123, 456 & all \\
+Gaussian noise $\sigma$ & 1.5 $\times$ per-layer std of honest updates & Gaussian atk \\
+Label-flip target class & 0 $\rightarrow$ 1 & Label-flip atk \\
+Krum Byzantine count $f$ & $\lfloor\rho N\rfloor$ (oracle) & Krum \\
+FLTrust root size & 1\% of training data (balanced) & FLTrust \\
+FLTrust root LR & 0.01 (same as clients) & FLTrust \\
+FedDBC cluster eps & 0.5 (DBSCAN) & FedDBC \\
+FedDBC min samples & 5 & FedDBC \\
+AMFTA $(\alpha_s,\alpha_h,\alpha_q)$ & (0.4, 0.3, 0.3) & AMFTA \\
+AMFTA-ND $(\alpha_s,\alpha_h)$ & (0.57, 0.43) & AMFTA-ND \\
+EMA $\beta$ & 0.9 & AMFTA, AMFTA-ND \\
+Initial trust $H_i^{(0)}$ & 0.5 & AMFTA, AMFTA-ND \\
+Validation buffer size & 500 samples (balanced) & AMFTA only \\
+$\epsilon$ (similarity denom.) & $10^{-8}$ & AMFTA, AMFTA-ND \\
+\bottomrule
+\end{tabular}
+\end{table}
+}
+
+\subsection{\textcolor{red}{Computational Cost}}
+
+\textcolor{red}{
+\begin{table}[t]
+\caption{Per-round server-side computational cost. $N$: clients per round; $d$: model dimension ($d$=7,681 for our logistic regression); $n_b$: borderline client count (typically $\ll N$).}
+\label{tab:cost}
+\centering
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Method} & \textbf{Server time complexity} & \textbf{Extra storage} \\
+\midrule
+FedAvg & $O(Nd)$ & $O(d)$ \\
+Trimmed Mean & $O(Nd)$ & $O(d)$ \\
+Krum & $O(N^2 d)$ & $O(d)$ \\
+FLTrust & $O(Nd)$ + 1 backward pass & $O(|\mathcal{D}_{\text{val}}|)$ \\
+FedDBC & $O(N^2)$ (DBSCAN pairwise) & $O(d)$ \\
+AMFTA-ND & $O(Nd)$ & $O(Nd)$ (EMA state) \\
+AMFTA & $O(Nd)+O(n_b|\mathcal{D}_{\text{val}}|)$ & $O(Nd)+O(|\mathcal{D}_{\text{val}}|)$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+}
+
+\textcolor{red}{In our setting ($N$=100, $d$=7,681), Krum's $O(N^2 d)$ cost is 100$\times$ larger than AMFTA-ND's $O(Nd)$. The DBSCAN pairwise computation in FedDBC is $O(N^2)$ in the number of updates but is applied to scalar distances (cosine similarity of $d$-vectors), so total cost is $O(N^2 d)$ for the distance matrix plus $O(N^2)$ for the DBSCAN core-point computation. All methods were executed on a single NVIDIA A100 GPU (40\,GB) with PyTorch 2.2.0. Mean wall-clock time per round: FedAvg 1.2\,s; Trimmed Mean 1.3\,s; Krum 4.1\,s; FLTrust 1.5\,s; FedDBC 2.1\,s; AMFTA-ND 1.4\,s; AMFTA 1.9\,s.}
+
+\subsection{\textcolor{red}{Cold-Start and Warm-Up}}
+
+\textcolor{red}{Trust-momentum methods face a cold-start challenge: EMA trust scores are initialised to $H_i^{(0)}=0.5$ for all clients, meaning the temporal discriminator provides no signal during the first few rounds. In our experiments, the EMA signal becomes reliable after approximately 4--6 rounds, which we verified by inspecting round-by-round trust distributions. During the warm-up phase, the aggregation is dominated by the similarity term ($\alpha_s=0.57$ for AMFTA-ND), providing a reasonable first-round defence. Operators deploying AMFTA-ND may optionally pre-warm the trust estimates using a short period of attack-free operation if this can be guaranteed, or accept the mild accuracy cost during warm-up.}
+
+\subsection{\textcolor{red}{Operator Decision Procedure}}
+
+\textcolor{red}{Based on the empirical results in Section~\ref{sec:setup}, we propose the following deployment decision procedure:
+\begin{enumerate}
+  \item \textbf{Is a clean, representative server dataset available and sustainable?} If yes, and the expected attacker fraction is below 20\%, FLTrust is viable in homogeneous settings; however, under strong non-IID heterogeneity ($\alpha\leq0.5$), FLTrust underperforms---use AMFTA-ND instead.
+  \item \textbf{Can you estimate the attacker count $f$?} If yes and $\rho<0.20$, Krum provides robust results. If $f$ is unknown, do not use Krum (its robustness guarantee requires $f<N/2-1$).
+  \item \textbf{What is your threat level?} If $\rho$ is expected to remain below 20\%, FedDBC provides the highest accuracy with low overhead. If $\rho$ may reach or exceed 20\%, or is unknown, deploy AMFTA-ND.
+  \item \textbf{Is compute budget constrained?} FedAvg, Trimmed Mean, and AMFTA-ND all run at $O(Nd)$ per round. Krum and FedDBC both require $O(N^2 d)$ or $O(N^2)$ pairwise operations.
+  \item \textbf{Default recommendation:} Deploy AMFTA-ND as the baseline defence. It requires no trusted data, no knowledge of $f$, runs at $O(Nd)$, and maintains $\geq$90.6\% accuracy under all tested conditions.
+\end{enumerate}}
+
+%% ══════════════════════════════════════════════════════════════════════════
+\section{Discussion and Limitations}
+\label{sec:discussion}
+%% ══════════════════════════════════════════════════════════════════════════
+
+Our results do not contradict, but rather complement, the strong case for robust aggregation in IoT FL. This breakdown of density-clustering at $\rho=0.30$ is not a coincidence: pairwise distances are used to choose the dominating cluster for FedDBC by majority voting. As the Byzantine fraction expands, bad updates get more and more mixed into the true population under non-IID conditions, where the distance between an unusual-but-honest update and a crafted attack shrinks. Once the honest clients can no longer be brought together in a geometrically separable way, the clustering step becomes non-discriminative, and the aggregator becomes flawed in the same way as FedAvg or worse. This boundary emerges between $\rho=0.20$ and $\rho=0.30$ in our experiments and is a built-in geometric limitation of any one-round geometric consensus method, whether based on cluster identification or otherwise.
+
+This cliff is avoided since trust-momentum aggregation does not rely on geometric separability being available in any single round. The EMA reputation signal gathers evidence throughout all rounds of training: a client that poisons consistently has a reputation that slowly wanes over time, whereas a client that has unusual but honest non-IID data continues to have a non-zero reputation because its updates, even if far away from the centroid, remain stable over time. This temporal dimension is what makes AMFTA-ND different from single-round methods and explains its stable performance at a 30\% Byzantine fraction.
+
+\textcolor{red}{The practical guidance for operators is as follows. When the expected attacker fraction is low (below 20\%), FedDBC offers the highest clean accuracy with no configuration overhead; in this regime, the dense benign cluster remains geometrically separable. When attacker fractions may reach or exceed 20\%---or when the threshold is unknown---a data-free trust-momentum aggregator (AMFTA-ND) is the safer choice: it requires no trusted server data, no knowledge of the attacker count, and maintains stable performance across all tested conditions. If compute budget is the primary constraint, Krum provides comparable robustness at $O(N^2 d)$ cost, provided the attacker count can be estimated.}
+
+We note several scoping limitations that present valuable avenues for future investigation:
+\begin{enumerate}
+\item \textbf{Dataset generalisability.} \textcolor{red}{While TON\_IoT provides a comprehensive multi-attack IoT environment, evaluating generalisability across additional network security benchmarks (e.g., CICIDS2017, Edge-IIoTset~\cite{ferrag2022federated}) remains an important next step.}
+\item \textbf{Statistical sample size.} \textcolor{red}{Three independent seeds cleanly separate stable mechanisms from catastrophic failure modes; extending to 5--10 seeds with formal significance testing (e.g., Wilcoxon signed-rank with Holm--Bonferroni correction) would tighten quantitative confidence bounds.}
+\item \textbf{Attack diversity.} \textcolor{red}{We evaluate representative data- and model-poisoning attacks. Adaptive, aggregation-aware attacks~\cite{fang2020local,shejwalkar2022manipulating} and backdoor attacks~\cite{bagdasaryan2020backdoor}---and their interaction with the temporal trust signal---are important extensions.}
+\item \textbf{Byzantine thresholds.} We do not evaluate near-boundary regimes ($\rho\to0.50$); behaviour in that range remains an open question.
+\item \textbf{System heterogeneity.} Clients are simulated using partitioned real data; hardware heterogeneity, intermittent connectivity, and communication delays are not modelled.
+\item \textbf{Server security.} We assume the aggregation server is not compromised; verifiable or encrypted aggregation~\textcolor{red}{\cite{park2025masking}} falls outside the scope of this study.
+\end{enumerate}
+
+\section*{Code and Data Availability}
+\textcolor{red}{To support reproducible research and benchmark validation, the complete PyTorch federated learning simulation framework, Dirichlet non-IID data partitioning scripts, and pre-evaluated result logs are publicly accessible. The repository containing the simulation code, data partition scripts, and evaluation logs is publicly accessible at \url{https://github.com/adeliusa486/Adaptive-Multi-Factor-Trust-Aggregation-for-Byzantine-Robust-Federated-Learning-in-IoT-Networks}.}
+
+%% ════════════════════════════════════════════════════════════════════════════
+\section{Conclusion}
+\color{blue}
+In this paper, we conducted a rigorous measurement study on the failure boundaries of Byzantine-robust federated learning within highly non-IID IoT intrusion detection networks. Our evaluation highlighted the severe limitations of standard robust aggregators, which catastrophically degrade when subjected to high heterogeneity and complex, multi-vector poisoning attacks. To overcome these challenges, we proposed AMFTA-ND, a robust aggregation framework that intelligently synergizes density-based clustering (DBSCAN) with continuous historical trust evaluation. By isolating malicious updates based on multidimensional update density rather than mere spatial distance, AMFTA-ND successfully preserves the integrity of the global model without penalizing legitimate, statistically skewed IoT clients. Extensive experiments on the TON\_IoT dataset validate our framework's superiority, demonstrating its ability to sustain a 97.1\% F1-score against aggressive 30\% label-flipping attacker scenarios, drastically outperforming Krum, Trimmed Mean, and FLTrust. Moving forward, our future work will focus on integrating fully decentralized, peer-to-peer trust evaluation mechanisms to eliminate the dependency on a central aggregator, further enhancing the scalability and resilience of secure federated IoT ecosystems.
+
+\bibliography{references}
+
+\end{document}

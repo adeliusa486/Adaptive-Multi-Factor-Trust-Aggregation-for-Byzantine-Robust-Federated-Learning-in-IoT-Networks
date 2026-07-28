@@ -111,8 +111,9 @@ def get_attack(name: str, **kwargs) -> BaseAttack:
     """
     key = name.lower().replace("-", "_")
     if key == "none":
-        from amfta.attacks.honest import HonestClient
-        return HonestClient()
+        class DummyAttack(BaseAttack):
+            def get_update(self, *args, **kwargs): return {}
+        return DummyAttack()
     if key not in _REGISTRY:
         raise ValueError(f"Unknown attack '{name}'. Available: {list(_REGISTRY.keys())}")
     return _REGISTRY[key](**kwargs)

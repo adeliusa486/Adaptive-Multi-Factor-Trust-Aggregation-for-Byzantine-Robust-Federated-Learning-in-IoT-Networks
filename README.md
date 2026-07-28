@@ -1,6 +1,10 @@
-# Adaptive Multi-Factor Trust Aggregation (AMFTA) for Byzantine-Resilient Federated Learning
+# When Do Byzantine-Robust Aggregators Fail? A Measurement Study on Federated Intrusion Detection under Non-IID IoT Traffic
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+**[📄 Download Full Paper (PDF)](paper/main.pdf)**
+
+![Radar Chart](figures/fig_radar.png)
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)([(https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python Version](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11-blue.svg)](https://www.python.org/downloads/)
 [![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![PyTorch](https://img.shields.io/badge/PyTorch-%E2%89%A52.1.0-ee4c2c.svg)](https://pytorch.org/)

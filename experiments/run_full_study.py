@@ -44,6 +44,7 @@ def main():
             "--seeds", *SEEDS,
             "--num_rounds", ROUNDS,
             "--since", SINCE,
+            "--use_synthetic",
         ]
         subprocess.run(cmd, cwd=os.path.abspath(os.path.join(HERE, "..")))
     print("\n########## FULL STUDY COMPLETE ##########", flush=True)
